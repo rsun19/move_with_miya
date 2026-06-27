@@ -7,7 +7,7 @@ export class UsersService {
     return 'Hello World!';
   }
 
-  async findUser(): Promise<User> {
+  findUser(): User {
     return {
       id: 1,
       email: 'hello',
@@ -16,7 +16,7 @@ export class UsersService {
     };
   }
 
-  async findUsers(): Promise<User[]> {
+  findUsers(): User[] {
     return [
       {
         id: 1,
@@ -27,7 +27,7 @@ export class UsersService {
     ];
   }
 
-  async createUser(): Promise<User> {
+  createUser(): User {
     return {
       id: 1,
       email: 'hello',
