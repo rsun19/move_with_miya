@@ -1,10 +1,21 @@
+export interface UserPreferences {
+  receiveNewsletter: boolean;
+  receiveClassNotifications: {
+    email: boolean;
+    sms: boolean;
+  };
+}
+
 export interface User {
   id: number;
   email: string;
-  isAdmin: boolean;
   firstName: string;
+  isTeacher: boolean;
+  preferences: UserPreferences;
+  joinDate: Date;
+  permissions?: string[];
+  phoneNumber?: string;
+  preferredName?: string;
+  middleName?: string;
   lastName?: string;
-  permissions?: string;
-  isTeacher?: boolean;
-  joinDate?: string;
 }

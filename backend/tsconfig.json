@@ -22,7 +22,10 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "ignoreDeprecations": "6.0",
-    "types": ["jest", "node"],
+    "types": [
+      "jest",
+      "node"
+    ],
     "paths": {
       "@app/shared": [
         "libs/shared/src"
