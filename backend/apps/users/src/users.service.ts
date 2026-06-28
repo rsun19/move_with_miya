@@ -12,7 +12,15 @@ export class UsersService {
       id: 1,
       email: 'hello',
       firstName: 'hello',
-      isAdmin: false,
+      isTeacher: false,
+      preferences: {
+        receiveNewsletter: false,
+        receiveClassNotifications: {
+          email: false,
+          sms: false,
+        },
+      },
+      joinDate: new Date(),
     };
   }
 
@@ -22,7 +30,15 @@ export class UsersService {
         id: 1,
         email: 'hello',
         firstName: 'hello',
-        isAdmin: false,
+        isTeacher: false,
+        preferences: {
+          receiveNewsletter: false,
+          receiveClassNotifications: {
+            email: false,
+            sms: false,
+          },
+        },
+        joinDate: new Date(),
       },
     ];
   }
@@ -32,7 +48,15 @@ export class UsersService {
       id: 1,
       email: 'hello',
       firstName: 'hello',
-      isAdmin: false,
+      isTeacher: false,
+      preferences: {
+        receiveNewsletter: false,
+        receiveClassNotifications: {
+          email: false,
+          sms: false,
+        },
+      },
+      joinDate: new Date(),
     };
   }
 }

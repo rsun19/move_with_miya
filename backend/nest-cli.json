@@ -19,6 +19,24 @@
         "tsConfigPath": "apps/backend/tsconfig.app.json"
       }
     },
+    "classes": {
+      "type": "application",
+      "root": "apps/classes",
+      "entryFile": "main",
+      "sourceRoot": "apps/classes/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/classes/tsconfig.app.json"
+      }
+    },
+    "registration": {
+      "type": "application",
+      "root": "apps/registration",
+      "entryFile": "main",
+      "sourceRoot": "apps/registration/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/registration/tsconfig.app.json"
+      }
+    },
     "shared": {
       "type": "library",
       "root": "libs/shared",
