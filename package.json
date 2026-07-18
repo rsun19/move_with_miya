@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "npm install --prefix backend && npm install --prefix frontend",
+    "postinstall": "npm install --prefix backend && npm install --prefix frontend && npm install --prefix user-service && npm install --prefix classes-service && npm install --prefix registration-service",
     "prepare": "husky",
-    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
-    "format": "npm run format --prefix backend && npm run format --prefix frontend"
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend && npm run lint --prefix user-service",
+    "format": "npm run format --prefix backend && npm run format --prefix frontend && npm run format --prefix user-service",
+    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend && npm run typecheck --prefix user-service && npm run typecheck --prefix classes-service && npm run typecheck --prefix registration-service",
+    "test": "npm run test --prefix backend"
   },
   "devDependencies": {
     "eslint": "^9.0.0",
@@ -15,4 +17,3 @@
     "prettier": "^3.4.2"
   }
 }
-
