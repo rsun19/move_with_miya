@@ -1,4 +1,32 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: miya
+      POSTGRES_PASSWORD: miya
+      POSTGRES_DB: miya
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U miya']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   rabbitmq:
     image: rabbitmq:3-management
     ports:
@@ -10,46 +38,81 @@ services:
       timeout: 5s
       retries: 5
 
-  users:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        APP: users
+  user-service:
+    build: ./user-service
+    ports:
+      - '3001:3001'
     volumes:
-      - ./backend:/app
+      - ./user-service:/app
       - /app/node_modules
     environment:
-      - RABBITMQ_URL=amqp://rabbitmq:5672
+      PORT: 3001
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      SESSION_SECRET: dev-secret-change-in-production
+      CORS_ORIGIN: http://localhost:5173
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: http://localhost:5173/api/auth/google/callback
     depends_on:
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        APP: backend
+    build: ./backend
+    ports:
+      - '3000:3000'
     volumes:
       - ./backend:/app
       - /app/node_modules
     environment:
-      - RABBITMQ_URL=amqp://rabbitmq:5672
-      - PORT=3000
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      SESSION_SECRET: dev-secret-change-in-production
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  classes-service:
+    build: ./classes-service
+    volumes:
+      - ./classes-service:/app
+      - /app/node_modules
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  registration-service:
+    build: ./registration-service
+    volumes:
+      - ./registration-service:/app
+      - /app/node_modules
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
       rabbitmq:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
+    ports:
+      - '5173:5173'
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=/api
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_AUTH_URL: http://localhost:3001/auth/google
+    depends_on:
+      - user-service
+      - backend
 
   nginx:
     image: nginx:alpine
@@ -60,3 +123,8 @@ services:
     depends_on:
       - backend
       - frontend
+      - user-service
+
+volumes:
+  redis-data:
+  postgres-data:
