@@ -1,45 +1,50 @@
-import { Injectable } from '@nestjs/common';
-import { Registration, RegistrationStatus } from './registration.interface';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
 export class RegistrationService {
-  findRegistrations(classId: number): Registration[] {
-    return [];
+  constructor(private readonly prisma: PrismaService) {}
+
+  findRegistrations(classId: number) {
+    return this.prisma.client.registration.findMany({
+      where: { classId },
+    });
   }
 
-  findRegistration(id: number): Registration {
-    return {
-      userId: 1,
-      classId: 1,
-      id: id,
-      status: RegistrationStatus.Registered,
-      registeredAt: new Date(),
-    };
+  async findRegistration(id: number) {
+    const reg = await this.prisma.client.registration.findUnique({
+      where: { id },
+    });
+    if (!reg) throw new NotFoundException(`Registration ${id} not found`);
+    return reg;
   }
 
-  createRegistration(classId: number, userId: number): Registration {
-    return {
-      id: 1,
-      classId,
-      userId,
-      status: RegistrationStatus.Registered,
-      registeredAt: new Date(),
-    };
+  createRegistration(classId: number, userId: string) {
+    return this.prisma.client.registration.create({
+      data: {
+        classId,
+        userId,
+        status: 'Registered',
+      },
+    });
   }
 
-  updateRegistration(id: number): Registration {
-    return {
-      id,
-      classId: 1,
-      userId: 1,
-      status: RegistrationStatus.Registered,
-      registeredAt: new Date(),
-    };
+  updateRegistration(id: number, data: Record<string, unknown>) {
+    return this.prisma.client.registration.update({
+      where: { id },
+      data,
+    });
   }
 
-  deleteRegistration(id: number, classId: number): void {
+  deleteRegistration(id: number, classId: number) {
+    return this.prisma.client.registration.delete({
+      where: { id },
+    });
   }
 
-  deleteClassRegistrations(classId: number): void {
+  deleteClassRegistrations(classId: number) {
+    return this.prisma.client.registration.deleteMany({
+      where: { classId },
+    });
   }
 }

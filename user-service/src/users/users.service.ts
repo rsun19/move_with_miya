@@ -1,63 +1,41 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { v4 as uuid } from 'uuid';
-import { User } from './interfaces/user.interface';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  private users: Map<string, User> = new Map();
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateUserDto): User {
-    const now = new Date();
-    const user: User = {
-      id: uuid(),
-      googleId: dto.googleId,
-      email: dto.email,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      avatarUrl: dto.avatarUrl,
-      isTeacher: dto.isTeacher ?? false,
-      phoneNumber: dto.phoneNumber,
-      preferredName: dto.preferredName,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.users.set(user.id, user);
-    return user;
+  async create(dto: CreateUserDto) {
+    return this.prisma.client.user.create({ data: dto });
   }
 
-  findAll(): User[] {
-    return Array.from(this.users.values());
+  async findAll() {
+    return this.prisma.client.user.findMany();
   }
 
-  findById(id: string): User {
-    const user = this.users.get(id);
+  async findById(id: string) {
+    const user = await this.prisma.client.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return user;
   }
 
-  findByEmail(email: string): User | undefined {
-    return Array.from(this.users.values()).find((u) => u.email === email);
+  async findByEmail(email: string) {
+    return this.prisma.client.user.findUnique({ where: { email } });
   }
 
-  findByGoogleId(googleId: string): User | undefined {
-    return Array.from(this.users.values()).find((u) => u.googleId === googleId);
+  async findByGoogleId(googleId: string) {
+    return this.prisma.client.user.findUnique({ where: { googleId } });
   }
 
-  update(id: string, dto: UpdateUserDto): User {
-    const user = this.findById(id);
-    const updated: User = {
-      ...user,
-      ...dto,
-      updatedAt: new Date(),
-    };
-    this.users.set(id, updated);
-    return updated;
+  async update(id: string, dto: UpdateUserDto) {
+    await this.findById(id);
+    return this.prisma.client.user.update({ where: { id }, data: dto });
   }
 
-  remove(id: string): void {
-    this.findById(id);
-    this.users.delete(id);
+  async remove(id: string) {
+    await this.findById(id);
+    await this.prisma.client.user.delete({ where: { id } });
   }
 }

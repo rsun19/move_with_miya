@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ClassStatus {
+  Scheduled
+  InProgress
+  Completed
+  Canceled
+}
+
+model Location {
+  id        Int         @id @default(autoincrement())
+  name      String?
+  address   String
+  city      String
+  state     String
+  zipCode   String
+  classes   YogaClass[]
+}
+
+model YogaClass {
+  id         Int         @id @default(autoincrement())
+  name       String
+  teacherIds Int[]
+  capacity   Int
+  startDate  DateTime
+  endDate    DateTime
+  status     ClassStatus @default(Scheduled)
+  locationId Int
+  location   Location    @relation(fields: [locationId], references: [id])
+  isPrivate  Boolean     @default(false) @map("private")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("yoga_classes")
+}

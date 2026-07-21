@@ -43,7 +43,7 @@ export class AuthController {
 
     const { accessToken } = await this.authService.exchangeCode(code);
     const profile = await this.authService.fetchGoogleProfile(accessToken);
-    const user = this.authService.findOrCreateUser(profile);
+    const user = await this.authService.findOrCreateUser(profile);
 
     req.session.userId = user.id;
 
@@ -60,7 +60,7 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@Req() req: Request) {
+  async me(@Req() req: Request) {
     const userId = req.session.userId;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.usersService.findById(userId);
