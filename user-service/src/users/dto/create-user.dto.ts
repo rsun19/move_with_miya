@@ -28,4 +28,8 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   preferredName?: string;
+
+  @IsOptional()
+  @IsString()
+  yogaExperience?: string;
 }
