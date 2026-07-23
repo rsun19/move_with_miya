@@ -1,58 +1,68 @@
 import { Injectable } from '@nestjs/common';
-import { ClassStatus, YogaClass } from './classes.interface';
-
-const defaultLocation = {
-  address: '123 Yoga St',
-  city: 'Yoga City',
-  state: 'CA',
-  zipCode: '90001',
-};
-
-function yogaClass(overrides: Partial<YogaClass> = {}): YogaClass {
-  return {
-    id: 1,
-    name: 'Morning Yoga',
-    teacherIds: [],
-    capacity: 20,
-    startDate: new Date('2024-06-01T08:00:00Z'),
-    endDate: new Date('2024-06-01T09:00:00Z'),
-    location: defaultLocation,
-    status: ClassStatus.Scheduled,
-    private: false,
-    ...overrides,
-  };
-}
+import { PrismaService } from './prisma/prisma.service';
+import { ClassStatus } from './generated/prisma/client';
 
 @Injectable()
 export class ClassesService {
-  findClasses(): YogaClass[] {
-    return [yogaClass({ id: 1, teacherIds: [1] })];
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
-  findClassesInRange(startDate: string, endDate: string): YogaClass[] {
-    return this.findClasses().filter(
-      (c) =>
-        c.startDate >= new Date(startDate) && c.endDate <= new Date(endDate),
-    );
-  }
-
-  findClass(id: number): YogaClass {
-    return yogaClass({ id });
-  }
-
-  createClass(): YogaClass {
-    return yogaClass({
-      id: 2,
-      name: 'Evening Yoga',
-      startDate: new Date('2024-06-01T18:00:00Z'),
-      endDate: new Date('2024-06-01T19:00:00Z'),
+  findClasses() {
+    return this.prisma.client.yogaClass.findMany({
+      include: { location: true },
     });
   }
 
-  updateClass(id: number): YogaClass {
-    return yogaClass({ id, name: 'Updated Yoga Class' });
+  findClassesInRange(startDate: string, endDate: string) {
+    return this.prisma.client.yogaClass.findMany({
+      where: {
+        startDate: { gte: new Date(startDate) },
+        endDate: { lte: new Date(endDate) },
+      },
+      include: { location: true },
+    });
   }
 
-  deleteClass(id: number): void {
+  findClass(id: number) {
+    return this.prisma.client.yogaClass.findUnique({
+      where: { id },
+      include: { location: true },
+    });
+  }
+
+  createClass(data: {
+    name: string;
+    teacherIds: number[];
+    capacity: number;
+    startDate: string;
+    endDate: string;
+    locationId: number;
+    status?: string;
+    private?: boolean;
+  }) {
+    return this.prisma.client.yogaClass.create({
+      data: {
+        name: data.name,
+        teacherIds: data.teacherIds,
+        capacity: data.capacity,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        locationId: data.locationId,
+        status: (data.status as ClassStatus) ?? ClassStatus.Scheduled,
+        isPrivate: data.private ?? false,
+      },
+      include: { location: true },
+    });
+  }
+
+  updateClass(id: number, data: Record<string, unknown>) {
+    return this.prisma.client.yogaClass.update({
+      where: { id },
+      data,
+      include: { location: true },
+    });
+  }
+
+  deleteClass(id: number) {
+    return this.prisma.client.yogaClass.delete({ where: { id } });
   }
 }

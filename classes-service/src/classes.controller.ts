@@ -22,13 +22,23 @@ export class ClassesController {
   }
 
   @MessagePattern({ cmd: 'create_class' })
-  createClass() {
-    return this.classesService.createClass();
+  createClass(data: {
+    name: string;
+    teacherIds: number[];
+    capacity: number;
+    startDate: string;
+    endDate: string;
+    locationId: number;
+    status?: string;
+    private?: boolean;
+  }) {
+    return this.classesService.createClass(data);
   }
 
   @MessagePattern({ cmd: 'update_class' })
   updateClass(data: { id: number } & Record<string, unknown>) {
-    return this.classesService.updateClass(data.id);
+    const { id, ...rest } = data;
+    return this.classesService.updateClass(id, rest);
   }
 
   @MessagePattern({ cmd: 'delete_class' })

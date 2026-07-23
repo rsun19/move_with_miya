@@ -40,4 +40,8 @@ export class UpdateUserDto {
   @IsDate()
   @Type(() => Date)
   lastLoginAt?: Date;
+
+  @IsOptional()
+  @IsString()
+  yogaExperience?: string;
 }

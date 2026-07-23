@@ -17,13 +17,19 @@ export class RegistrationController {
   }
 
   @MessagePattern({ cmd: 'create_registration' })
-  createRegistration(data: { classId: number; userId: number } & Record<string, unknown>) {
-    return this.registrationService.createRegistration(data.classId, data.userId);
+  createRegistration(
+    data: { classId: number; userId: string } & Record<string, unknown>,
+  ) {
+    return this.registrationService.createRegistration(
+      data.classId,
+      data.userId,
+    );
   }
 
   @MessagePattern({ cmd: 'update_registration' })
   updateRegistration(data: { id: number } & Record<string, unknown>) {
-    return this.registrationService.updateRegistration(data.id);
+    const { id, ...rest } = data;
+    return this.registrationService.updateRegistration(id, rest);
   }
 
   @MessagePattern({ cmd: 'delete_registration' })

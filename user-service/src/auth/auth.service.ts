@@ -1,10 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
-import {
-  type GoogleProfile,
-  type User,
-} from '../users/interfaces/user.interface';
+import type { GoogleProfile } from '../users/interfaces/user.interface';
 
 @Injectable()
 export class AuthService {
@@ -104,13 +101,15 @@ export class AuthService {
     };
   }
 
-  findOrCreateUser(profile: GoogleProfile): User {
-    const existing = this.usersService.findByGoogleId(profile.sub);
+  async findOrCreateUser(profile: GoogleProfile) {
+    const existing = await this.usersService.findByGoogleId(profile.sub);
     if (existing) {
-      return this.usersService.update(existing.id, { lastLoginAt: new Date() });
+      return this.usersService.update(existing.id, {
+        lastLoginAt: new Date(),
+      });
     }
 
-    const user = this.usersService.create({
+    const user = await this.usersService.create({
       googleId: profile.sub,
       email: profile.email,
       firstName: profile.given_name,

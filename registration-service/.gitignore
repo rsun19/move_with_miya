@@ -8,3 +8,6 @@ logs
 .DS_Store
 /coverage
 /.nyc_output
+
+# Prisma generated client
+/src/generated
