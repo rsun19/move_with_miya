@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
 } from '@nestjs/common';
@@ -17,8 +18,8 @@ export class RegistrationController {
     private readonly registrationClient: ClientProxy,
   ) {}
 
-  @Get(':classId')
-  findRegistrations(@Param('classId') classId: string) {
+  @Get('class/:classId')
+  findRegistrations(@Param('classId', ParseIntPipe) classId: number) {
     return this.registrationClient.send(
       { cmd: 'get_registrations' },
       { classId },
@@ -26,25 +27,24 @@ export class RegistrationController {
   }
 
   @Get(':id')
-  findRegistration(@Param('id') id: string) {
+  findRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.registrationClient.send({ cmd: 'get_registration' }, { id });
   }
 
-  @Post(':classId/:id')
+  @Post('class/:classId/user/:userId')
   createRegistration(
-    @Param('classId') classId: string,
-    @Param('id') id: string,
-    @Body() body: Record<string, unknown>,
+    @Param('classId', ParseIntPipe) classId: number,
+    @Param('userId') userId: string,
   ) {
     return this.registrationClient.send(
       { cmd: 'create_registration' },
-      { classId, id, ...body },
+      { classId, userId },
     );
   }
 
   @Patch(':id')
   updateRegistration(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() body: Record<string, unknown>,
   ) {
     return this.registrationClient.send(
@@ -53,10 +53,10 @@ export class RegistrationController {
     );
   }
 
-  @Delete(':classId/:id')
+  @Delete('class/:classId/registration/:id')
   deleteRegistration(
-    @Param('classId') classId: string,
-    @Param('id') id: string,
+    @Param('classId', ParseIntPipe) classId: number,
+    @Param('id', ParseIntPipe) id: number,
   ) {
     return this.registrationClient.send(
       { cmd: 'delete_registration' },
@@ -64,8 +64,8 @@ export class RegistrationController {
     );
   }
 
-  @Delete(':classId')
-  deleteClassRegistrations(@Param('classId') classId: string) {
+  @Delete('class/:classId')
+  deleteClassRegistrations(@Param('classId', ParseIntPipe) classId: number) {
     return this.registrationClient.send(
       { cmd: 'delete_registrations' },
       { classId },

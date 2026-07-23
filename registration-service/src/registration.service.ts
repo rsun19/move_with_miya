@@ -36,7 +36,7 @@ export class RegistrationService {
     });
   }
 
-  deleteRegistration(id: number, classId: number) {
+  deleteRegistration(id: number) {
     return this.prisma.client.registration.delete({
       where: { id },
     });

@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -31,7 +32,7 @@ export class ClassesController {
   }
 
   @Get(':id')
-  findClass(@Param('id') id: string) {
+  findClass(@Param('id', ParseIntPipe) id: number) {
     return this.classesClient.send({ cmd: 'get_class' }, { id });
   }
 
@@ -41,12 +42,15 @@ export class ClassesController {
   }
 
   @Patch(':id')
-  updateClass(@Param('id') id: string, @Body() body: Record<string, unknown>) {
+  updateClass(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: Record<string, unknown>,
+  ) {
     return this.classesClient.send({ cmd: 'update_class' }, { id, ...body });
   }
 
   @Delete(':id')
-  deleteClass(@Param('id') id: string) {
+  deleteClass(@Param('id', ParseIntPipe) id: number) {
     return this.classesClient.send({ cmd: 'delete_class' }, { id });
   }
 }

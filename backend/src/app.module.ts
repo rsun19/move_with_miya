@@ -4,6 +4,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ClassesController } from './externalControllers/ClassesController';
+import { LocationController } from './externalControllers/LocationController';
 import { RegistrationController } from './externalControllers/RegistrationController';
 
 @Module({
@@ -33,7 +34,12 @@ import { RegistrationController } from './externalControllers/RegistrationContro
       },
     ]),
   ],
-  controllers: [AppController, ClassesController, RegistrationController],
+  controllers: [
+    AppController,
+    ClassesController,
+    LocationController,
+    RegistrationController,
+  ],
   providers: [AppService],
 })
 export class AppModule {}

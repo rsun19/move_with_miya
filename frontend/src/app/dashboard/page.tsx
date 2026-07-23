@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth';
 
 export default function DashboardPage() {
@@ -18,7 +19,13 @@ export default function DashboardPage() {
       </div>
       <div className="flex items-center gap-4 p-4 border rounded-lg">
         {user?.avatarUrl && (
-          <img src={user.avatarUrl} alt="" className="w-12 h-12 rounded-full" />
+          <Image
+            src={user.avatarUrl}
+            alt=""
+            width={48}
+            height={48}
+            className="w-12 h-12 rounded-full"
+          />
         )}
         <div>
           <p className="font-medium">
