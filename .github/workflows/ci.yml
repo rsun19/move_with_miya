@@ -35,10 +35,12 @@ jobs:
           npm ci --prefix registration-service
       - if: steps.cache.outputs.cache-hit != 'true'
         name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
         run: |
-          cd user-service && npx prisma generate && cd ..
-          cd classes-service && npx prisma generate && cd ..
-          cd registration-service && npx prisma generate && cd ..
+          (cd user-service && npx prisma generate)
+          (cd classes-service && npx prisma generate)
+          (cd registration-service && npx prisma generate)
 
   lint:
     needs: install
