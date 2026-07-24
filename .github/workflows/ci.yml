@@ -22,7 +22,8 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            **/src/generated
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/prisma/schema.prisma') }}
       - if: steps.cache.outputs.cache-hit != 'true'
         run: npm ci
       - if: steps.cache.outputs.cache-hit != 'true'
@@ -32,6 +33,12 @@ jobs:
           npm ci --prefix user-service
           npm ci --prefix classes-service
           npm ci --prefix registration-service
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Generate Prisma client
+        run: |
+          cd user-service && npx prisma generate && cd ..
+          cd classes-service && npx prisma generate && cd ..
+          cd registration-service && npx prisma generate && cd ..
 
   lint:
     needs: install
@@ -45,7 +52,8 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            **/src/generated
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/prisma/schema.prisma') }}
       - run: npm run lint
       - run: npx prettier --check .
 
@@ -61,7 +69,8 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            **/src/generated
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/prisma/schema.prisma') }}
       - run: npm run typecheck
 
   build:
@@ -76,7 +85,8 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            **/src/generated
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/prisma/schema.prisma') }}
       - run: npm run build --prefix backend
       - run: npm run build --prefix user-service
       - run: npm run build --prefix classes-service
@@ -95,5 +105,6 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            **/src/generated
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/prisma/schema.prisma') }}
       - run: npm test
