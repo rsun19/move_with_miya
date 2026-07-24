@@ -33,8 +33,8 @@ export class RegistrationController {
   }
 
   @MessagePattern({ cmd: 'delete_registration' })
-  deleteRegistration(data: { classId: number; id: number }) {
-    return this.registrationService.deleteRegistration(data.id, data.classId);
+  deleteRegistration(data: { id: number }) {
+    return this.registrationService.deleteRegistration(data.id);
   }
 
   @MessagePattern({ cmd: 'delete_registrations' })

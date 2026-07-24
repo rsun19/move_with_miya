@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import type { User } from '../generated/prisma/client';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 
@@ -43,7 +44,7 @@ export class AuthController {
 
     const { accessToken } = await this.authService.exchangeCode(code);
     const profile = await this.authService.fetchGoogleProfile(accessToken);
-    const user = await this.authService.findOrCreateUser(profile);
+    const user: User = await this.authService.findOrCreateUser(profile);
 
     req.session.userId = user.id;
 
@@ -60,7 +61,7 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@Req() req: Request) {
+  async me(@Req() req: Request): Promise<User> {
     const userId = req.session.userId;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.usersService.findById(userId);

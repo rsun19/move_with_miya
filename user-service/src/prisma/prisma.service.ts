@@ -8,9 +8,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   public client: PrismaClient;
 
   constructor(private readonly configService: ConfigService) {
-    const adapter = new PrismaPg({
-      connectionString: this.configService.get<string>('DATABASE_URL'),
-    });
+    const databaseUrl = this.configService.get<string>('DATABASE_URL');
+    if (!databaseUrl) throw new Error('DATABASE_URL is not configured');
+    const adapter = new PrismaPg({ connectionString: databaseUrl });
     this.client = new PrismaClient({ adapter });
   }
 

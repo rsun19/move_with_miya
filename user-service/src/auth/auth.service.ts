@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
+import type { User } from '../generated/prisma/client';
 import type { GoogleProfile } from '../users/interfaces/user.interface';
 
 @Injectable()
@@ -101,7 +102,7 @@ export class AuthService {
     };
   }
 
-  async findOrCreateUser(profile: GoogleProfile) {
+  async findOrCreateUser(profile: GoogleProfile): Promise<User> {
     const existing = await this.usersService.findByGoogleId(profile.sub);
     if (existing) {
       return this.usersService.update(existing.id, {
@@ -109,14 +110,12 @@ export class AuthService {
       });
     }
 
-    const user = await this.usersService.create({
+    return this.usersService.create({
       googleId: profile.sub,
       email: profile.email,
       firstName: profile.given_name,
       lastName: profile.family_name ?? '',
       avatarUrl: profile.picture,
     });
-
-    return user;
   }
 }
