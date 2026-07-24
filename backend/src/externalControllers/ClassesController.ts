@@ -46,7 +46,7 @@ export class ClassesController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.classesClient.send({ cmd: 'update_class' }, { id, ...body });
+    return this.classesClient.send({ cmd: 'update_class' }, { ...body, id });
   }
 
   @Delete(':id')

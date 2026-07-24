@@ -37,7 +37,7 @@ export class LocationController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.classesClient.send({ cmd: 'update_location' }, { id, ...body });
+    return this.classesClient.send({ cmd: 'update_location' }, { ...body, id });
   }
 
   @Delete(':id')

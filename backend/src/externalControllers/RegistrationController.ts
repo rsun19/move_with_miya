@@ -53,15 +53,9 @@ export class RegistrationController {
     );
   }
 
-  @Delete('class/:classId/registration/:id')
-  deleteRegistration(
-    @Param('classId', ParseIntPipe) classId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.registrationClient.send(
-      { cmd: 'delete_registration' },
-      { classId, id },
-    );
+  @Delete(':id')
+  deleteRegistration(@Param('id', ParseIntPipe) id: number) {
+    return this.registrationClient.send({ cmd: 'delete_registration' }, { id });
   }
 
   @Delete('class/:classId')
