@@ -8,8 +8,10 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { AdminGuard } from '../common/guards/admin.guard';
 
 @Controller('registration')
 export class RegistrationController {
@@ -18,6 +20,7 @@ export class RegistrationController {
     private readonly registrationClient: ClientProxy,
   ) {}
 
+  @UseGuards(AdminGuard)
   @Get('class/:classId')
   findRegistrations(@Param('classId', ParseIntPipe) classId: number) {
     return this.registrationClient.send(
@@ -26,6 +29,7 @@ export class RegistrationController {
     );
   }
 
+  @UseGuards(AdminGuard)
   @Get(':id')
   findRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.registrationClient.send({ cmd: 'get_registration' }, { id });
@@ -42,6 +46,7 @@ export class RegistrationController {
     );
   }
 
+  @UseGuards(AdminGuard)
   @Patch(':id')
   updateRegistration(
     @Param('id', ParseIntPipe) id: number,
@@ -53,11 +58,13 @@ export class RegistrationController {
     );
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   deleteRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.registrationClient.send({ cmd: 'delete_registration' }, { id });
   }
 
+  @UseGuards(AdminGuard)
   @Delete('class/:classId')
   deleteClassRegistrations(@Param('classId', ParseIntPipe) classId: number) {
     return this.registrationClient.send(

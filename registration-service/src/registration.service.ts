@@ -47,4 +47,19 @@ export class RegistrationService {
       where: { classId },
     });
   }
+
+  createContactSubmission(data: {
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+  }) {
+    return this.prisma.client.contactSubmission.create({ data });
+  }
+
+  getContactSubmissions() {
+    return this.prisma.client.contactSubmission.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }

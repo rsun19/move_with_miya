@@ -4,8 +4,10 @@ import {
   IsOptional,
   IsBoolean,
   IsDate,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { UserRole } from '../../generated/prisma/client';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -27,6 +29,14 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   isTeacher?: boolean;
+
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
+
+  @IsOptional()
+  @IsBoolean()
+  banned?: boolean;
 
   @IsOptional()
   @IsString()

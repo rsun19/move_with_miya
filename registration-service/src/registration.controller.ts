@@ -41,4 +41,19 @@ export class RegistrationController {
   deleteClassRegistrations(data: { classId: number }) {
     return this.registrationService.deleteClassRegistrations(data.classId);
   }
+
+  @MessagePattern({ cmd: 'create_contact_submission' })
+  createContactSubmission(data: {
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+  }) {
+    return this.registrationService.createContactSubmission(data);
+  }
+
+  @MessagePattern({ cmd: 'get_contact_submissions' })
+  getContactSubmissions() {
+    return this.registrationService.getContactSubmissions();
+  }
 }

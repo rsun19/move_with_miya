@@ -7,18 +7,26 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  ADMIN
+  MEMBER
+  VIEWER
+  TEACHER
+}
+
 model User {
-  id            String    @id @default(uuid())
-  googleId      String    @unique
-  email         String    @unique
-  firstName     String
-  lastName      String
-  avatarUrl     String?
-  isTeacher     Boolean   @default(false)
-  phoneNumber   String?
-  preferredName String?
-  lastLoginAt   DateTime?
+  id             String    @id @default(uuid())
+  googleId       String    @unique
+  email          String    @unique
+  firstName      String
+  lastName       String
+  avatarUrl      String?
+  role           UserRole  @default(MEMBER)
+  banned         Boolean   @default(false)
+  phoneNumber    String?
+  preferredName  String?
+  lastLoginAt    DateTime?
   yogaExperience String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

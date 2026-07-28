@@ -21,3 +21,12 @@ model Registration {
   registeredAt DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 }
+
+model ContactSubmission {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+}

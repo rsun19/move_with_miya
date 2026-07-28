@@ -39,4 +39,12 @@ export class UsersService {
     await this.findById(id);
     await this.prisma.client.user.delete({ where: { id } });
   }
+
+  async toggleBan(id: string): Promise<User> {
+    const user = await this.findById(id);
+    return this.prisma.client.user.update({
+      where: { id },
+      data: { banned: !user.banned },
+    });
+  }
 }
