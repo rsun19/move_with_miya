@@ -57,9 +57,11 @@ export class RegistrationService {
     return this.prisma.client.contactSubmission.create({ data });
   }
 
-  getContactSubmissions() {
+  getContactSubmissions(take: number = 50, skip: number = 0) {
     return this.prisma.client.contactSubmission.findMany({
-      orderBy: { createdAt: 'desc' },
+      take,
+      skip,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }
 }

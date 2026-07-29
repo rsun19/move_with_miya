@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { UserRole } from '../enums/user-role';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -45,7 +46,7 @@ export class AdminGuard implements CanActivate {
     if (user.banned) {
       throw new ForbiddenException('User is banned');
     }
-    if (user.role !== 'ADMIN') {
+    if (user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Admin access required');
     }
 

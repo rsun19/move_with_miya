@@ -49,10 +49,13 @@ export class UsersService {
   }
 
   async toggleBan(id: string): Promise<User> {
-    const user = await this.findById(id);
-    return this.prisma.client.user.update({
-      where: { id },
-      data: { banned: !user.banned },
+    return this.prisma.client.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id } });
+      if (!user) throw new NotFoundException(`User ${id} not found`);
+      return tx.user.update({
+        where: { id },
+        data: { banned: !user.banned },
+      });
     });
   }
 }

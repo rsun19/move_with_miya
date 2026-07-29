@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CreateContactSubmissionDto } from './dto/create-contact-submission.dto';
@@ -20,7 +28,13 @@ export class ContactController {
 
   @UseGuards(AdminGuard)
   @Get()
-  findAll() {
-    return this.registrationClient.send({ cmd: 'get_contact_submissions' }, {});
+  findAll(@Query('take') take?: string, @Query('skip') skip?: string) {
+    return this.registrationClient.send(
+      { cmd: 'get_contact_submissions' },
+      {
+        take: take ? parseInt(take, 10) : undefined,
+        skip: skip ? parseInt(skip, 10) : undefined,
+      },
+    );
   }
 }

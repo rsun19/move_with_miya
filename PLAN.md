@@ -11,6 +11,8 @@
 | **Admin Roles** | `UserRole` enum (`ADMIN`, `MEMBER`, `VIEWER`, `TEACHER`) |
 | **Class Model** | Add `cost` (Decimal), `description` (String), `duration` (Int), `imageUrl` (String?) |
 
+
+
 ---
 
 ## Status
@@ -68,6 +70,7 @@
 - Remove `postcss.config.mjs`
 
 ### New files
+
 | File | Purpose |
 |------|---------|
 | `src/lib/theme.ts` | MUI theme (brand colors, typography) |
@@ -76,6 +79,7 @@
 | `src/components/Footer.tsx` | Footer |
 
 ### Modified files
+
 | File | Changes |
 |------|---------|
 | `src/app/layout.tsx` | Remove Tailwind classes, wrap with `ThemeRegistry` |
@@ -90,6 +94,7 @@
 ## Phase 4: Class Browser (Home Page)
 
 ### Components
+
 | Component | Description |
 |-----------|-------------|
 | `CalendarView` | MUI DateCalendar showing classes on dates |
@@ -112,6 +117,7 @@
 - Async server component fetches class + registrations count
 
 ### Client Components
+
 | Component | Description |
 |-----------|-------------|
 | `ClassDetail` | Full info: image, description, duration, location, instructor, price |
@@ -131,6 +137,7 @@
 ## Phase 6: User Profile (`/dashboard`)
 
 ### Components
+
 | Component | Description |
 |-----------|-------------|
 | `ProfileForm` | MUI TextFields: firstName, lastName, preferredName, phoneNumber, yogaExperience |
@@ -156,9 +163,10 @@
 ## Phase 8: Admin Dashboard (`/admin`)
 
 ### Guard
-- `useAuth()` → check `user.role === 'admin'`, redirect to `/` if not
+- `useAuth()` → check `user.role === 'ADMIN'`, redirect to `/` if not
 
 ### Sections (tabs)
+
 | Tab | Component | Description |
 |-----|-----------|-------------|
 | Classes | `ClassManager` | MUI DataGrid: list, create, edit, delete classes |
@@ -184,7 +192,7 @@
 
 ## File Map
 
-```
+```text
 frontend/
 ├── src/
 │   ├── app/

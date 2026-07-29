@@ -53,7 +53,7 @@ export class RegistrationController {
   }
 
   @MessagePattern({ cmd: 'get_contact_submissions' })
-  getContactSubmissions() {
-    return this.registrationService.getContactSubmissions();
+  getContactSubmissions(data: { take?: number; skip?: number }) {
+    return this.registrationService.getContactSubmissions(data.take, data.skip);
   }
 }
