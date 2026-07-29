@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
@@ -24,12 +25,26 @@ export class AdminGuard implements CanActivate {
       'http://localhost:3001',
     );
 
-    const resp = await fetch(`${userServiceUrl}/users/${userId}`);
+    let resp: Response;
+    try {
+      resp = await fetch(`${userServiceUrl}/users/${userId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      throw new ServiceUnavailableException('User service unreachable');
+    }
+
+    if (resp.status >= 500) {
+      throw new ServiceUnavailableException('User service error');
+    }
     if (!resp.ok) {
       throw new UnauthorizedException('Failed to verify user');
     }
 
-    const user = (await resp.json()) as { role: string };
+    const user = (await resp.json()) as { role: string; banned: boolean };
+    if (user.banned) {
+      throw new ForbiddenException('User is banned');
+    }
     if (user.role !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
     }

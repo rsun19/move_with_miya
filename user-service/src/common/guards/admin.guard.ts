@@ -20,6 +20,9 @@ export class AdminGuard implements CanActivate {
       throw new UnauthorizedException('Not authenticated');
     }
     const user = await this.usersService.findById(userId);
+    if (user.banned) {
+      throw new ForbiddenException('User is banned');
+    }
     if (user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Admin access required');
     }

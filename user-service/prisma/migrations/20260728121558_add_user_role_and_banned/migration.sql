@@ -8,6 +8,12 @@
 CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'MEMBER', 'VIEWER', 'TEACHER');
 
 -- AlterTable
-ALTER TABLE "User" DROP COLUMN "isTeacher",
+ALTER TABLE "User"
 ADD COLUMN     "banned" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "role" "UserRole" NOT NULL DEFAULT 'MEMBER';
+
+-- Backfill existing teachers
+UPDATE "User" SET "role" = 'TEACHER' WHERE "isTeacher" = true;
+
+-- Drop old column
+ALTER TABLE "User" DROP COLUMN "isTeacher";
