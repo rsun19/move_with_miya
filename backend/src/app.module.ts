@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { ClassesController } from './externalControllers/ClassesController';
 import { LocationController } from './externalControllers/LocationController';
 import { RegistrationController } from './externalControllers/RegistrationController';
+import { ContactController } from './externalControllers/ContactController';
+import { AdminGuard } from './common/guards/admin.guard';
 
 @Module({
   imports: [
@@ -39,7 +41,8 @@ import { RegistrationController } from './externalControllers/RegistrationContro
     ClassesController,
     LocationController,
     RegistrationController,
+    ContactController,
   ],
-  providers: [AppService],
+  providers: [AppService, AdminGuard],
 })
 export class AppModule {}

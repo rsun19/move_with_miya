@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { User } from '../generated/prisma/client';
+import type { User, UserRole } from '../generated/prisma/client';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 
@@ -38,5 +38,24 @@ export class UsersService {
   async remove(id: string): Promise<void> {
     await this.findById(id);
     await this.prisma.client.user.delete({ where: { id } });
+  }
+
+  async updateRole(id: string, role: UserRole): Promise<User> {
+    await this.findById(id);
+    return this.prisma.client.user.update({
+      where: { id },
+      data: { role },
+    });
+  }
+
+  async toggleBan(id: string): Promise<User> {
+    return this.prisma.client.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id } });
+      if (!user) throw new NotFoundException(`User ${id} not found`);
+      return tx.user.update({
+        where: { id },
+        data: { banned: !user.banned },
+      });
+    });
   }
 }
