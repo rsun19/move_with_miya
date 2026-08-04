@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "npm install --prefix backend && npm install --prefix frontend && npm install --prefix user-service && npm install --prefix classes-service && npm install --prefix registration-service",
+    "postinstall": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm install 2>&1); done",
     "prepare": "husky",
-    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend && npm run lint --prefix user-service && npm run lint --prefix classes-service && npm run lint --prefix registration-service",
-    "format": "npm run format --prefix backend && npm run format --prefix frontend && npm run format --prefix user-service",
-    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend && npm run typecheck --prefix user-service && npm run typecheck --prefix classes-service && npm run typecheck --prefix registration-service",
-    "test": "npm run test --prefix backend"
+    "dev": "concurrently --names backend,user-svc,classes,registration,frontend --prefix-colors blue,magenta,yellow,cyan,green -c auto \"cd backend && npm run start:dev\" \"cd user-service && npm run start:dev\" \"cd classes-service && npm run start:dev\" \"cd registration-service && npm run start:dev\" \"cd frontend && npm run dev\"",
+    "lint": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run lint 2>&1 || true); done",
+    "format": "for d in backend frontend user-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run format 2>&1 || true); done",
+    "typecheck": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run typecheck 2>&1 || true); done",
+    "test": "npm run test --prefix backend",
+    "audit:fix": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm audit fix 2>&1 || true); done"
   },
   "devDependencies": {
+    "concurrently": "^10.0.4",
     "eslint": "^9.0.0",
     "husky": "^9.1.0",
     "lint-staged": "^15.2.0",

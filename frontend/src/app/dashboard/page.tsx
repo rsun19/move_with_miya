@@ -1,39 +1,57 @@
 'use client';
 
-import Image from 'next/image';
 import { useAuth } from '@/lib/auth';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <button
-          onClick={logout}
-          className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-100"
-        >
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 4,
+        }}
+      >
+        <Typography variant="h4" component="h1">
+          Dashboard
+        </Typography>
+        <Button onClick={logout} variant="outlined">
           Sign out
-        </button>
-      </div>
-      <div className="flex items-center gap-4 p-4 border rounded-lg">
-        {user?.avatarUrl && (
-          <Image
-            src={user.avatarUrl}
-            alt=""
-            width={48}
-            height={48}
-            className="w-12 h-12 rounded-full"
-          />
-        )}
-        <div>
-          <p className="font-medium">
-            {user?.firstName} {user?.lastName}
-          </p>
-          <p className="text-sm text-gray-600">{user?.email}</p>
-        </div>
-      </div>
-    </div>
+        </Button>
+      </Box>
+      <Card>
+        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {user?.avatarUrl && (
+            <Avatar
+              src={user.avatarUrl}
+              alt=""
+              sx={{ width: 56, height: 56 }}
+            />
+          )}
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6">
+              {user?.firstName} {user?.lastName}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {user?.email}
+            </Typography>
+          </Box>
+          {user?.role && user.role !== 'MEMBER' && (
+            <Chip label={user.role} color="primary" size="small" />
+          )}
+        </CardContent>
+      </Card>
+    </Container>
   );
 }

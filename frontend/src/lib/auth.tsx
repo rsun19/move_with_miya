@@ -10,12 +10,17 @@ import {
 } from 'react';
 import { api } from './api';
 
+export type UserRole = 'ADMIN' | 'MEMBER' | 'VIEWER' | 'TEACHER';
+
 export interface AuthUser {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   avatarUrl?: string;
+  role: UserRole;
+  yogaExperience?: string;
+  banned?: boolean;
 }
 
 interface AuthContextValue {

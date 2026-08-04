@@ -3,6 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -16,9 +21,16 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        Loading...
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+        }}
+      >
+        <CircularProgress />
+      </Box>
     );
   }
 
@@ -27,14 +39,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-      <h1 className="text-2xl font-semibold">Sign in to Move with Miya</h1>
-      <button
-        onClick={login}
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+    <Container maxWidth="sm">
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '60vh',
+          gap: 3,
+          textAlign: 'center',
+        }}
       >
-        Sign in with Google
-      </button>
-    </div>
+        <Typography variant="h4" component="h1">
+          Sign in to Move with Miya
+        </Typography>
+        <Button onClick={login} variant="contained" size="large">
+          Sign in with Google
+        </Button>
+      </Box>
+    </Container>
   );
 }
