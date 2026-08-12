@@ -29,7 +29,7 @@ export default function LoginPage() {
           minHeight: '60vh',
         }}
       >
-        <CircularProgress />
+        <CircularProgress aria-label="Loading" />
       </Box>
     );
   }

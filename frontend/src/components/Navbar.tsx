@@ -79,6 +79,7 @@ export default function Navbar() {
       <AppBar position="sticky" color="inherit" elevation={0}>
         <Toolbar>
           <IconButton
+            aria-label="Open navigation menu"
             color="inherit"
             edge="start"
             onClick={handleDrawerToggle}

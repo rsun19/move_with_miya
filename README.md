@@ -16,7 +16,7 @@ A microservices-based yoga studio management platform.
 | `redis` | Redis 7 | 6379 | Session store |
 | `rabbitmq` | RabbitMQ | 5672 / 15672 | Message broker |
 
-```
+```text
 Frontend (port 5173)
   │
   └── /api/*       →  backend:3000
@@ -28,7 +28,7 @@ Frontend (port 5173)
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 20.9+
 - Docker + Docker Compose
 - Google OAuth credentials (for login)
 
@@ -36,7 +36,7 @@ Frontend (port 5173)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create an OAuth 2.0 Web Client:
-   - **Authorized redirect URIs**: `http://localhost:3001/auth/google/callback`
+   - **Authorized redirect URIs**: `http://localhost:5173/api/auth/google/callback`
 3. Copy the Client ID and Client Secret
 
 ## Environment variables
@@ -53,7 +53,7 @@ GOOGLE_CLIENT_SECRET=GOCSPX-...
 SESSION_SECRET=change-me-to-a-random-string
 ```
 
-The defaults in `.env.example` work for everything else in development.
+The defaults in `.env.example` (including `DATABASE_URL`, `RABBITMQ_*`, `POSTGRES_*`) work for everything else in development.
 
 ## Running locally (with hot reload)
 
@@ -83,12 +83,14 @@ cd user-service && npx prisma generate
 
 ### 4. Run database setup
 
-The `init.sql` runs automatically in Postgres on first start. If you need to re-run it:
+The `init.sql` runs automatically in Postgres on first start. The named `postgres-data` volume persists the database across `docker compose down`, so `init.sql` only runs again after a destructive full reset:
 
 ```bash
-docker compose down
+docker compose down --volumes
 docker compose up -d
 ```
+
+> **Warning:** `docker compose down --volumes` deletes the `postgres-data` volume and destroys all database data. Use it only when you intend to reset everything.
 
 ### 5. Start all services
 
@@ -127,4 +129,17 @@ npm run audit:fix     # npm audit fix across all services
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 ```
 
-Requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `SESSION_SECRET` to be set in `.env`.
+Requires the following to be set in `.env`:
+
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `RABBITMQ_USER`, `RABBITMQ_PASS`
+- `SESSION_SECRET`
+- `CORS_ORIGIN`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_CALLBACK_URL`
+
+Production checklist:
+
+- [ ] Use real, non-development secrets — never placeholders such as `change-me` or `guest`.
+- [ ] Set `CORS_ORIGIN` and `GOOGLE_CALLBACK_URL` to real deployment URLs, not `localhost`.
+- [ ] Verify `POSTGRES_PASSWORD` and `RABBITMQ_PASS` are unique, strong credentials before exposing the stack publicly.

@@ -26,7 +26,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           minHeight: '60vh',
         }}
       >
-        <CircularProgress />
+        <CircularProgress aria-label="Loading" />
       </Box>
     );
   }

@@ -2,15 +2,18 @@
   "name": "move-with-miya",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
-    "postinstall": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm install 2>&1); done",
+    "postinstall": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm install 2>&1); done",
     "prepare": "husky",
     "dev": "concurrently --names backend,user-svc,classes,registration,frontend --prefix-colors blue,magenta,yellow,cyan,green -c auto \"cd backend && npm run start:dev\" \"cd user-service && npm run start:dev\" \"cd classes-service && npm run start:dev\" \"cd registration-service && npm run start:dev\" \"cd frontend && npm run dev\"",
-    "lint": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run lint 2>&1 || true); done",
-    "format": "for d in backend frontend user-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run format 2>&1 || true); done",
-    "typecheck": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run typecheck 2>&1 || true); done",
+    "lint": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run lint 2>&1); done",
+    "format": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run format 2>&1); done",
+    "typecheck": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run typecheck 2>&1); done",
     "test": "npm run test --prefix backend",
-    "audit:fix": "for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm audit fix 2>&1 || true); done"
+    "audit:fix": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm audit fix 2>&1); done"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
