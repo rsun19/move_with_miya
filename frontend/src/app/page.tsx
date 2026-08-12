@@ -1,45 +1,88 @@
 'use client';
 
-import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from 'next/link';
 
 export default function Home() {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        Loading...
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+        }}
+      >
+        <CircularProgress aria-label="Loading" />
+      </Box>
     );
   }
 
   if (user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <h1 className="text-2xl font-semibold">
-          Welcome back, {user.firstName}
-        </h1>
-        <Link
-          href="/dashboard"
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+      <Container maxWidth="sm">
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '60vh',
+            gap: 3,
+            textAlign: 'center',
+          }}
         >
-          Go to Dashboard
-        </Link>
-      </div>
+          <Typography variant="h3" component="h1">
+            Welcome back, {user.firstName}
+          </Typography>
+          <Button
+            component={Link}
+            href="/dashboard"
+            variant="contained"
+            size="large"
+          >
+            Go to Dashboard
+          </Button>
+        </Box>
+      </Container>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-      <h1 className="text-2xl font-semibold">Move with Miya</h1>
-      <p className="text-gray-600">Yoga class management</p>
-      <Link
-        href="/login"
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+    <Container maxWidth="sm">
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '60vh',
+          gap: 3,
+          textAlign: 'center',
+        }}
       >
-        Sign in with Google
-      </Link>
-    </div>
+        <Typography
+          variant="h2"
+          component="h1"
+          sx={{ color: 'primary.main', fontWeight: 700 }}
+        >
+          Move with Miya
+        </Typography>
+        <Typography variant="h6" color="text.secondary">
+          Yoga class management
+        </Typography>
+        <Button component={Link} href="/login" variant="contained" size="large">
+          Sign in with Google
+        </Button>
+      </Box>
+    </Container>
   );
 }
