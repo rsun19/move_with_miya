@@ -71,9 +71,17 @@ This starts Redis, Postgres, and RabbitMQ.
 npm install
 ```
 
-This installs root deps (concurrently, eslint, etc.) and runs `postinstall` to install all sub-service deps.
+This installs root deps (concurrently, eslint, etc.) and runs `postinstall` to install all sub-service deps. It also generates the Prisma client for `user-service` (outputs to `user-service/src/generated/prisma`).
 
-### 3. Run database setup
+### 3. Generate the Prisma client
+
+This runs automatically during `npm install` (via `postinstall`). If you need to regenerate it manually:
+
+```bash
+cd user-service && npx prisma generate
+```
+
+### 4. Run database setup
 
 The `init.sql` runs automatically in Postgres on first start. If you need to re-run it:
 
@@ -82,7 +90,7 @@ docker compose down
 docker compose up -d
 ```
 
-### 4. Start all services
+### 5. Start all services
 
 ```bash
 npm run dev
