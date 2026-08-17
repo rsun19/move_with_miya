@@ -16,7 +16,7 @@ export interface Location {
 export interface YogaClass {
   id: number;
   name: string;
-  teacherIds: number[];
+  teacherIds: string[];
   capacity: number;
   startDate: Date;
   endDate: Date;

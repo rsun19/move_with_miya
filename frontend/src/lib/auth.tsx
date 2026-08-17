@@ -10,18 +10,9 @@ import {
 } from 'react';
 import { api } from './api';
 
-export type UserRole = 'ADMIN' | 'MEMBER' | 'VIEWER' | 'TEACHER';
+import type { AuthUser, UserRole } from '@/lib/types';
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  avatarUrl?: string;
-  role: UserRole;
-  yogaExperience?: string;
-  banned?: boolean;
-}
+export type { AuthUser, UserRole };
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -31,7 +22,7 @@ interface AuthContextValue {
 }
 
 const AUTH_URL =
-  process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3001/auth/google';
+  process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3003/auth/google';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 

@@ -22,6 +22,13 @@ export class UsersService {
     return user;
   }
 
+  async findByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return this.prisma.client.user.findMany({
+      where: { id: { in: ids } },
+    });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.prisma.client.user.findUnique({ where: { email } });
   }

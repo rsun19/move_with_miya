@@ -28,7 +28,7 @@ model Location {
 model YogaClass {
   id          Int         @id @default(autoincrement())
   name        String
-  teacherIds  Int[]
+  teacherIds  String[]
   capacity    Int
   cost        Decimal     @default(0)
   description String      @default("")

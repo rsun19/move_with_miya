@@ -1,5 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from './prisma/prisma.service';
+
+class RpcError extends RpcException {
+  constructor(statusCode: number, message: string) {
+    super({ statusCode, message });
+  }
+}
 
 @Injectable()
 export class RegistrationService {
@@ -11,15 +18,40 @@ export class RegistrationService {
     });
   }
 
+  findRegistrationsByUser(userId: string) {
+    return this.prisma.client.registration.findMany({
+      where: { userId },
+    });
+  }
+
+  async getRegistrationCounts(classIds: number[]) {
+    if (classIds.length === 0) return [];
+    const grouped = await this.prisma.client.registration.groupBy({
+      by: ['classId'],
+      where: { classId: { in: classIds } },
+      _count: { _all: true },
+    });
+    return grouped.map((g) => ({
+      classId: g.classId,
+      count: g._count._all,
+    }));
+  }
+
   async findRegistration(id: number) {
     const reg = await this.prisma.client.registration.findUnique({
       where: { id },
     });
-    if (!reg) throw new NotFoundException(`Registration ${id} not found`);
+    if (!reg) throw new RpcError(404, `Registration ${id} not found`);
     return reg;
   }
 
-  createRegistration(classId: number, userId: string) {
+  async createRegistration(classId: number, userId: string) {
+    const existing = await this.prisma.client.registration.findFirst({
+      where: { classId, userId },
+    });
+    if (existing) {
+      throw new RpcError(409, 'Already registered for this class');
+    }
     return this.prisma.client.registration.create({
       data: {
         classId,
@@ -27,6 +59,26 @@ export class RegistrationService {
         status: 'Registered',
       },
     });
+  }
+
+  async findRegistrationByClassAndUser(classId: number, userId: string) {
+    const reg = await this.prisma.client.registration.findFirst({
+      where: { classId, userId },
+    });
+    if (!reg) {
+      throw new RpcError(404, 'Not registered for this class');
+    }
+    return reg;
+  }
+
+  async deleteRegistrationByClassAndUser(classId: number, userId: string) {
+    const reg = await this.prisma.client.registration.findFirst({
+      where: { classId, userId },
+    });
+    if (!reg) {
+      throw new RpcError(404, 'Not registered for this class');
+    }
+    return this.prisma.client.registration.delete({ where: { id: reg.id } });
   }
 
   updateRegistration(id: number, data: Record<string, unknown>) {

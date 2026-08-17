@@ -1,13 +1,14 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
   Param,
-  ParseUUIDPipe,
   ParseEnumPipe,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
@@ -29,6 +30,22 @@ export class UsersController {
   @Get()
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get('batch')
+  async findByIds(@Query('ids') ids: string) {
+    const idList = ids
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const users = await this.usersService.findByIds(idList);
+    return users.map(({ id, firstName, lastName, avatarUrl, role }) => ({
+      id,
+      firstName,
+      lastName,
+      avatarUrl,
+      role,
+    }));
   }
 
   @Get(':id')

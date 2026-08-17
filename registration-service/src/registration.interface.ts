@@ -6,7 +6,7 @@ export enum RegistrationStatus {
 
 export interface Registration {
   id: number;
-  userId: number;
+  userId: string;
   classId: number;
   status: RegistrationStatus;
   registeredAt: Date;

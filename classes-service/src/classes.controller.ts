@@ -24,7 +24,7 @@ export class ClassesController {
   @MessagePattern({ cmd: 'create_class' })
   createClass(data: {
     name: string;
-    teacherIds: number[];
+    teacherIds: string[];
     capacity: number;
     startDate: string;
     endDate: string;

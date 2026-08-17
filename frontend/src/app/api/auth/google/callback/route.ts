@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const USER_SERVICE = 'http://localhost:3001';
+import { USER_SERVICE_URL } from '@/lib/env';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -14,7 +13,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const url = new URL(`${USER_SERVICE}/auth/google/callback`);
+  const url = new URL(`${USER_SERVICE_URL}/auth/google/callback`);
   url.searchParams.set('code', code);
   url.searchParams.set('state', state);
 

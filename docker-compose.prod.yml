@@ -113,9 +113,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_AUTH_URL: ${NEXT_PUBLIC_AUTH_URL:-https://example.com/api/auth/google}
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      USER_SERVICE_URL: http://user-service:3001
+      BACKEND_URL: http://backend:3000
 
   nginx:
     image: nginx:alpine

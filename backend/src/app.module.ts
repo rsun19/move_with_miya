@@ -8,6 +8,7 @@ import { LocationController } from './externalControllers/LocationController';
 import { RegistrationController } from './externalControllers/RegistrationController';
 import { ContactController } from './externalControllers/ContactController';
 import { AdminGuard } from './common/guards/admin.guard';
+import { StaffGuard } from './common/guards/staff.guard';
 
 @Module({
   imports: [
@@ -43,6 +44,6 @@ import { AdminGuard } from './common/guards/admin.guard';
     RegistrationController,
     ContactController,
   ],
-  providers: [AppService, AdminGuard],
+  providers: [AppService, AdminGuard, StaffGuard],
 })
 export class AppModule {}
