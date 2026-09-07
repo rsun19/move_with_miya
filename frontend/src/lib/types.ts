@@ -62,6 +62,12 @@ export interface Registration {
     avatarUrl?: string | null;
     role: string;
   } | null;
+  class?: {
+    id: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+  } | null;
 }
 
 export interface ContactSubmission {
@@ -70,6 +76,7 @@ export interface ContactSubmission {
   email: string;
   subject: string;
   message: string;
+  read: boolean;
   createdAt: string;
 }
 

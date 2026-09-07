@@ -21,6 +21,11 @@ describe('RegistrationService', () => {
       groupBy: jest.Mock;
       count: jest.Mock;
     };
+    contactSubmission: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      update: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
 
@@ -43,6 +48,11 @@ describe('RegistrationService', () => {
         deleteMany: jest.fn(),
         groupBy: jest.fn(),
         count: jest.fn(),
+      },
+      contactSubmission: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
       },
       $transaction: jest.fn((callback: (tx: typeof prisma) => unknown) =>
         callback(prisma),
@@ -84,6 +94,15 @@ describe('RegistrationService', () => {
     await expect(service.findRegistrations(10)).resolves.toEqual([existing]);
     expect(prisma.registration.findMany).toHaveBeenCalledWith({
       where: { classId: 10 },
+    });
+  });
+
+  it('returns all registrations in reverse registration order', async () => {
+    prisma.registration.findMany.mockResolvedValue([existing]);
+
+    await expect(service.findAllRegistrations()).resolves.toEqual([existing]);
+    expect(prisma.registration.findMany).toHaveBeenCalledWith({
+      orderBy: [{ registeredAt: 'desc' }, { id: 'desc' }],
     });
   });
 
@@ -280,22 +299,44 @@ describe('RegistrationService', () => {
       subject: 'Question',
       message: 'Hello',
     };
-    const contactModel = {
-      create: jest.fn().mockResolvedValue(contact),
-      findMany: jest.fn().mockResolvedValue([contact]),
-    };
-    (
-      prisma as typeof prisma & { contactSubmission: typeof contactModel }
-    ).contactSubmission = contactModel;
+    prisma.contactSubmission.create.mockResolvedValue(contact);
+    prisma.contactSubmission.findMany.mockResolvedValue([contact]);
 
     await expect(service.createContactSubmission(contact)).resolves.toEqual(
       contact,
     );
     await expect(service.getContactSubmissions()).resolves.toEqual([contact]);
-    expect(contactModel.findMany).toHaveBeenCalledWith({
+    expect(prisma.contactSubmission.findMany).toHaveBeenCalledWith({
       take: 50,
       skip: 0,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  });
+
+  it('updates contact read status', async () => {
+    const contact = { id: 7, read: false };
+    prisma.contactSubmission.update.mockResolvedValue({
+      ...contact,
+      read: true,
+    });
+
+    await expect(service.markContactSubmissionRead(7, true)).resolves.toEqual({
+      ...contact,
+      read: true,
+    });
+    expect(prisma.contactSubmission.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { read: true },
+    });
+  });
+
+  it('maps a missing contact submission to not found', async () => {
+    prisma.contactSubmission.update.mockRejectedValue({ code: 'P2025' });
+
+    await expect(
+      service.markContactSubmissionRead(99, true),
+    ).rejects.toMatchObject({
+      message: 'Contact submission 99 not found',
     });
   });
 });

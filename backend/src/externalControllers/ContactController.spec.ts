@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { of } from 'rxjs';
+import { lastValueFrom, of } from 'rxjs';
 import { ContactController } from './ContactController';
 import { ContactEmailService } from './contact-email.service';
 
@@ -41,5 +41,18 @@ describe('ContactController', () => {
       dto,
     );
     expect(emailService.notify).toHaveBeenCalledWith(dto);
+  });
+
+  it('marks a contact submission read or unread', async () => {
+    const updated = { id: 4, read: true };
+    client.send.mockReturnValue(of(updated));
+
+    await expect(
+      lastValueFrom(controller.markRead(4, { read: true })),
+    ).resolves.toEqual(updated);
+    expect(client.send).toHaveBeenCalledWith(
+      { cmd: 'mark_contact_submission_read' },
+      { id: 4, read: true },
+    );
   });
 });

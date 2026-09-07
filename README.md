@@ -51,9 +51,17 @@ Edit `.env` and set at minimum:
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-...
 SESSION_SECRET=change-me-to-a-random-string
+
+# Optional contact notifications via Resend
+RESEND_API_KEY=re_...
+CONTACT_EMAIL_TO=studio@example.com
+RESEND_FROM_EMAIL=Move with Miya <hello@your-domain.example>
 ```
 
 The defaults in `.env.example` (including `DATABASE_URL`, `RABBITMQ_*`, `POSTGRES_*`) work for everything else in development.
+
+Contact submissions are always stored. When the optional Resend settings are
+present, the backend also sends a notification email to `CONTACT_EMAIL_TO`.
 
 ## Running locally (with hot reload)
 

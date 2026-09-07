@@ -30,6 +30,20 @@ interface Registration {
   classId: number;
   status: string;
   registeredAt: string;
+  user?: Record<string, unknown> | null;
+  class?: {
+    id: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+  } | null;
+}
+
+interface ClassSummary {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate: string;
 }
 
 @Controller('registration')
@@ -60,34 +74,61 @@ export class RegistrationController {
     }
   }
 
+  private async rpcClasses<T = unknown>(cmd: string, payload: object) {
+    return lastValueFrom<T>(this.classesClient.send<T>({ cmd }, payload));
+  }
+
+  private async enrichRegistrations(
+    registrations: Registration[],
+  ): Promise<Registration[]> {
+    const userIds = [
+      ...new Set(registrations.map((r) => r.userId).filter(Boolean)),
+    ];
+    const userServiceUrl =
+      process.env.USER_SERVICE_URL || 'http://localhost:3003';
+
+    const [users, classes] = await Promise.all([
+      userIds.length === 0
+        ? Promise.resolve([] as Record<string, unknown>[])
+        : fetch(
+            `${userServiceUrl}/users/batch?ids=${encodeURIComponent(
+              userIds.join(','),
+            )}`,
+            { cache: 'no-store' },
+          ).then(async (res) =>
+            res.ok ? ((await res.json()) as Record<string, unknown>[]) : [],
+          ),
+      this.rpcClasses<ClassSummary[]>('get_classes', {}).catch(
+        (): ClassSummary[] => [],
+      ),
+    ]);
+
+    const userMap = new Map(users.map((u) => [String(u.id), u]));
+    const classMap = new Map(classes.map((cls) => [cls.id, cls]));
+    return registrations.map((registration) => ({
+      ...registration,
+      user: userMap.get(registration.userId) ?? null,
+      class: classMap.get(registration.classId) ?? null,
+    }));
+  }
+
   @UseGuards(StaffGuard)
   @Get('class/:classId')
   async findRegistrations(@Param('classId', ParseIntPipe) classId: number) {
     const registrations = await this.rpc<Registration[]>('get_registrations', {
       classId,
     });
-    const userIds = [
-      ...new Set(registrations.map((r) => r.userId).filter(Boolean)),
-    ];
-    if (userIds.length === 0) return registrations;
+    return this.enrichRegistrations(registrations);
+  }
 
-    const userServiceUrl =
-      process.env.USER_SERVICE_URL || 'http://localhost:3003';
-    const res = await fetch(
-      `${userServiceUrl}/users/batch?ids=${encodeURIComponent(
-        userIds.join(','),
-      )}`,
-      { cache: 'no-store' },
+  @UseGuards(AdminGuard)
+  @Get()
+  async findAllRegistrations() {
+    const registrations = await this.rpc<Registration[]>(
+      'get_all_registrations',
+      {},
     );
-    const users = res.ok
-      ? ((await res.json()) as Record<string, unknown>[])
-      : [];
-    const userMap = new Map(users.map((u) => [String(u.id), u]));
-
-    return registrations.map((r) => ({
-      ...r,
-      user: userMap.get(r.userId) ?? null,
-    }));
+    return this.enrichRegistrations(registrations);
   }
 
   @Get('me')
