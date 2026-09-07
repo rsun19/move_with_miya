@@ -43,6 +43,8 @@ export interface AuthUser {
   lastName: string;
   avatarUrl?: string | null;
   role: UserRole;
+  phoneNumber?: string | null;
+  preferredName?: string | null;
   yogaExperience?: string | null;
   banned?: boolean;
 }

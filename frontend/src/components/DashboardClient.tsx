@@ -9,7 +9,8 @@ import Container from '@mui/material/Container';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Avatar from '@mui/material/Avatar';
-import Chip from '@mui/material/Chip';
+import RoleBadge from '@/components/RoleBadge';
+import ProfileForm from '@/components/ProfileForm';
 
 export default function DashboardClient({ user }: { user: AuthUser }) {
   const { logout } = useAuth();
@@ -48,9 +49,12 @@ export default function DashboardClient({ user }: { user: AuthUser }) {
               {user.email}
             </Typography>
           </Box>
-          {user.role && user.role !== 'MEMBER' && (
-            <Chip label={user.role} color="primary" size="small" />
-          )}
+          <RoleBadge role={user.role} />
+        </CardContent>
+      </Card>
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <ProfileForm user={user} />
         </CardContent>
       </Card>
     </Container>
