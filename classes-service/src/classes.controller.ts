@@ -26,11 +26,15 @@ export class ClassesController {
     name: string;
     teacherIds: string[];
     capacity: number;
+    cost?: string | number;
+    description?: string;
+    duration?: number;
+    imageUrl?: string | null;
     startDate: string;
     endDate: string;
     locationId: number;
     status?: string;
-    private?: boolean;
+    isPrivate?: boolean;
   }) {
     return this.classesService.createClass(data);
   }

@@ -16,6 +16,9 @@ describe('ClassesService date validation', () => {
     yogaClass: {
       create: jest.Mock;
       update: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      delete: jest.Mock;
     };
   };
 
@@ -24,6 +27,9 @@ describe('ClassesService date validation', () => {
       yogaClass: {
         create: jest.fn(),
         update: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
       },
     };
 
@@ -61,6 +67,31 @@ describe('ClassesService date validation', () => {
       );
     });
 
+    it('persists all class fields including privacy', async () => {
+      prisma.yogaClass.create.mockResolvedValue({ id: 1 });
+
+      await service.createClass({
+        ...base,
+        cost: '25.50',
+        description: 'A restorative session',
+        duration: 75,
+        imageUrl: 'https://example.com/yoga.jpg',
+        isPrivate: true,
+      });
+
+      expect(prisma.yogaClass.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cost: 25.5,
+            description: 'A restorative session',
+            duration: 75,
+            imageUrl: 'https://example.com/yoga.jpg',
+            isPrivate: true,
+          }) as never,
+        }) as never,
+      );
+    });
+
     it('rejects a missing startDate', () => {
       expect(() => service.createClass({ ...base, startDate: '' })).toThrow(
         BadRequestException,
@@ -72,6 +103,54 @@ describe('ClassesService date validation', () => {
         service.createClass({ ...base, startDate: 'not-a-date' }),
       ).toThrow(BadRequestException);
     });
+
+    it('rejects an end date that is not after the start date', () => {
+      expect(() =>
+        service.createClass({
+          ...base,
+          endDate: base.startDate,
+        }),
+      ).toThrow(BadRequestException);
+    });
+  });
+
+  it('loads classes with their locations', async () => {
+    prisma.yogaClass.findMany.mockResolvedValue([{ id: 1 }]);
+
+    await expect(service.findClasses()).resolves.toEqual([{ id: 1 }]);
+    expect(prisma.yogaClass.findMany).toHaveBeenCalledWith({
+      include: { location: true },
+    });
+  });
+
+  it('loads classes in a date range', async () => {
+    prisma.yogaClass.findMany.mockResolvedValue([]);
+
+    await service.findClassesInRange(
+      '2026-09-01T00:00:00.000Z',
+      '2026-09-30T23:59:59.000Z',
+    );
+
+    expect(prisma.yogaClass.findMany).toHaveBeenCalledWith({
+      where: {
+        startDate: { gte: new Date('2026-09-01T00:00:00.000Z') },
+        endDate: { lte: new Date('2026-09-30T23:59:59.000Z') },
+      },
+      include: { location: true },
+    });
+  });
+
+  it('loads and deletes a class by id', async () => {
+    prisma.yogaClass.findUnique.mockResolvedValue({ id: 1 });
+    prisma.yogaClass.delete.mockResolvedValue({ id: 1 });
+
+    await expect(service.findClass(1)).resolves.toEqual({ id: 1 });
+    await expect(service.deleteClass(1)).resolves.toEqual({ id: 1 });
+    expect(prisma.yogaClass.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      include: { location: true },
+    });
+    expect(prisma.yogaClass.delete).toHaveBeenCalledWith({ where: { id: 1 } });
   });
 
   describe('updateClass', () => {

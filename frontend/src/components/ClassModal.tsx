@@ -47,6 +47,8 @@ export default function ClassModal({
   const teachers = cls.teachers ?? [];
   // eslint-disable-next-line react-hooks/purity -- time comparison must reflect "now"
   const hasEnded = new Date(cls.endDate).getTime() < Date.now();
+  const registrationClosed =
+    hasEnded || cls.status === 'Canceled' || cls.status === 'Completed';
 
   const locationName =
     cls.location.name ?? `${cls.location.city}, ${cls.location.state}`;
@@ -63,7 +65,10 @@ export default function ClassModal({
     } catch (error) {
       setStatus('error');
       const err = error as { status?: number; message?: string };
-      if (err.status === 409) {
+      if (
+        err.status === 409 &&
+        err.message === 'Already registered for this class'
+      ) {
         onRegisteredChange(cls.id, true);
         setStatus('idle');
       } else {
@@ -165,9 +170,9 @@ export default function ClassModal({
         <Button component={Link} href={`/classes/${cls.id}`}>
           View More
         </Button>
-        {hasEnded ? (
+        {registrationClosed ? (
           <Button variant="outlined" disabled>
-            Class ended
+            {hasEnded ? 'Class ended' : 'Registration closed'}
           </Button>
         ) : currentUserId ? (
           registered ? (
@@ -182,6 +187,14 @@ export default function ClassModal({
               ) : (
                 'Cancel Registration'
               )}
+            </Button>
+          ) : cls.isPrivate ? (
+            <Button
+              component={Link}
+              href={`/classes/${cls.id}`}
+              variant="contained"
+            >
+              View details to register
             </Button>
           ) : (
             <Button

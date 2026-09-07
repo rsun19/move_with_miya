@@ -105,9 +105,7 @@ export class AuthService {
   async findOrCreateUser(profile: GoogleProfile): Promise<User> {
     const existing = await this.usersService.findByGoogleId(profile.sub);
     if (existing) {
-      return this.usersService.update(existing.id, {
-        lastLoginAt: new Date(),
-      });
+      return this.usersService.updateLastLogin(existing.id);
     }
 
     return this.usersService.create({

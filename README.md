@@ -92,6 +92,14 @@ docker compose up -d
 
 > **Warning:** `docker compose down --volumes` deletes the `postgres-data` volume and destroys all database data. Use it only when you intend to reset everything.
 
+Apply Prisma migrations before starting the application services:
+
+```bash
+for service in user-service classes-service registration-service; do
+  (cd "$service" && npx prisma migrate deploy)
+done
+```
+
 ### 5. Start all services
 
 ```bash

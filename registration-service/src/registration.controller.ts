@@ -18,11 +18,15 @@ export class RegistrationController {
 
   @MessagePattern({ cmd: 'create_registration' })
   createRegistration(
-    data: { classId: number; userId: string } & Record<string, unknown>,
+    data: { classId: number; userId: string; capacity: number } & Record<
+      string,
+      unknown
+    >,
   ) {
     return this.registrationService.createRegistration(
       data.classId,
       data.userId,
+      data.capacity,
     );
   }
 

@@ -17,6 +17,11 @@ import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import TextField from '@mui/material/TextField';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { api } from '@/lib/api';
@@ -58,12 +63,23 @@ export default function ClassDetailClient({
     'checking' | 'idle' | 'loading' | 'registered' | 'error'
   >('checking');
   const [message, setMessage] = useState('');
+  const [experienceDialogOpen, setExperienceDialogOpen] = useState(false);
+  const [experienceDraft, setExperienceDraft] = useState(
+    user?.yogaExperience ?? '',
+  );
+  const [experienceError, setExperienceError] = useState('');
+  const [experienceSaving, setExperienceSaving] = useState(false);
+  const [hasYogaExperience, setHasYogaExperience] = useState(
+    Boolean(user?.yogaExperience?.trim()),
+  );
 
   const locationName =
     cls.location.name ?? `${cls.location.city}, ${cls.location.state}`;
   const teachers = cls.teachers ?? [];
   // eslint-disable-next-line react-hooks/purity -- time comparison must reflect "now"
   const hasEnded = new Date(cls.endDate).getTime() < Date.now();
+  const registrationClosed =
+    hasEnded || cls.status === 'Canceled' || cls.status === 'Completed';
 
   useEffect(() => {
     if (!user) return;
@@ -80,7 +96,7 @@ export default function ClassDetailClient({
     };
   }, [user, cls.id]);
 
-  const handleRegister = async () => {
+  const registerForClass = async () => {
     if (!user) return;
     setStatus('loading');
     try {
@@ -92,12 +108,51 @@ export default function ClassDetailClient({
     } catch (error) {
       setStatus('error');
       const err = error as { status?: number; message?: string };
-      if (err.status === 409) {
+      if (
+        err.status === 409 &&
+        err.message === 'Already registered for this class'
+      ) {
         setStatus('registered');
         setMessage('');
       } else {
         setMessage(err.message || 'Registration failed.');
       }
+    }
+  };
+
+  const handleRegister = () => {
+    if (!user) return;
+    if (cls.isPrivate && !hasYogaExperience) {
+      setExperienceDraft(user.yogaExperience ?? '');
+      setExperienceError('');
+      setExperienceDialogOpen(true);
+      return;
+    }
+    void registerForClass();
+  };
+
+  const handleExperienceSubmit = async () => {
+    const experience = experienceDraft.trim();
+    if (!experience) {
+      setExperienceError('Please describe your yoga experience.');
+      return;
+    }
+
+    setExperienceSaving(true);
+    setExperienceError('');
+    try {
+      await api(`/api/users/${user?.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ yogaExperience: experience }),
+      });
+      setHasYogaExperience(true);
+      setExperienceDialogOpen(false);
+      await registerForClass();
+    } catch (error) {
+      const err = error as { message?: string };
+      setExperienceError(err.message || 'Could not save your experience.');
+    } finally {
+      setExperienceSaving(false);
     }
   };
 
@@ -187,10 +242,16 @@ export default function ClassDetailClient({
           <Alert severity="success">You are registered for this class!</Alert>
         )}
         {status === 'error' && <Alert severity="error">{message}</Alert>}
+        {user && cls.isPrivate && !hasYogaExperience && (
+          <Alert severity="info">
+            Please share your yoga experience before registering for this
+            private class.
+          </Alert>
+        )}
 
-        {hasEnded ? (
+        {registrationClosed ? (
           <Button variant="outlined" size="large" disabled>
-            Class ended
+            {hasEnded ? 'Class ended' : 'Registration closed'}
           </Button>
         ) : user && status === 'checking' ? (
           <Button variant="contained" size="large" disabled>
@@ -271,6 +332,58 @@ export default function ClassDetailClient({
           </Button>
         </Box>
       </Stack>
+
+      <Dialog
+        open={experienceDialogOpen}
+        onClose={() => {
+          if (!experienceSaving) setExperienceDialogOpen(false);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Tell us about your yoga experience</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            This private class requires a little background so the instructor
+            can prepare for you.
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={4}
+            label="Yoga experience"
+            value={experienceDraft}
+            onChange={(event) => setExperienceDraft(event.target.value)}
+            error={Boolean(experienceError)}
+            helperText={
+              experienceError ||
+              'Include experience level, styles, or relevant limitations.'
+            }
+            disabled={experienceSaving}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setExperienceDialogOpen(false)}
+            color="inherit"
+            disabled={experienceSaving}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void handleExperienceSubmit()}
+            variant="contained"
+            disabled={experienceSaving}
+          >
+            {experienceSaving ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              'Save and register'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

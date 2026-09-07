@@ -28,7 +28,7 @@ export class RegistrationService {
     if (classIds.length === 0) return [];
     const grouped = await this.prisma.client.registration.groupBy({
       by: ['classId'],
-      where: { classId: { in: classIds } },
+      where: { classId: { in: classIds }, status: 'Registered' },
       _count: { _all: true },
     });
     return grouped.map((g) => ({
@@ -45,20 +45,53 @@ export class RegistrationService {
     return reg;
   }
 
-  async createRegistration(classId: number, userId: string) {
-    const existing = await this.prisma.client.registration.findFirst({
-      where: { classId, userId },
-    });
-    if (existing) {
-      throw new RpcError(409, 'Already registered for this class');
+  async createRegistration(classId: number, userId: string, capacity: number) {
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      throw new RpcError(400, 'Class capacity is invalid');
     }
-    return this.prisma.client.registration.create({
-      data: {
-        classId,
-        userId,
-        status: 'Registered',
-      },
-    });
+    try {
+      return await this.prisma.client.$transaction(
+        async (tx) => {
+          const existing = await tx.registration.findFirst({
+            where: { classId, userId },
+          });
+          if (existing && existing.status !== 'Canceled') {
+            throw new RpcError(409, 'Already registered for this class');
+          }
+
+          const registeredCount = await tx.registration.count({
+            where: { classId, status: 'Registered' },
+          });
+          if (registeredCount >= capacity) {
+            throw new RpcError(409, 'Class is full');
+          }
+
+          if (existing) {
+            return tx.registration.update({
+              where: { id: existing.id },
+              data: { status: 'Registered', registeredAt: new Date() },
+            });
+          }
+
+          return tx.registration.create({
+            data: {
+              classId,
+              userId,
+              status: 'Registered',
+            },
+          });
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') {
+        throw new RpcError(409, 'Already registered for this class');
+      }
+      if ((error as { code?: string }).code === 'P2034') {
+        throw new RpcError(409, 'Class is full');
+      }
+      throw error;
+    }
   }
 
   async findRegistrationByClassAndUser(classId: number, userId: string) {

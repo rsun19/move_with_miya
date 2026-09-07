@@ -21,6 +21,8 @@ model Registration {
   status       RegistrationStatus   @default(Registered)
   registeredAt DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
+
+  @@unique([classId, userId])
 }
 
 model ContactSubmission {

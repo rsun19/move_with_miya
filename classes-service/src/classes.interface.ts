@@ -1,11 +1,12 @@
 export enum ClassStatus {
-  Scheduled = 'scheduled',
-  InProgress = 'in_progress',
-  Completed = 'completed',
-  Canceled = 'canceled',
+  Scheduled = 'Scheduled',
+  InProgress = 'InProgress',
+  Completed = 'Completed',
+  Canceled = 'Canceled',
 }
 
 export interface Location {
+  id: number;
   name?: string;
   address: string;
   city: string;
@@ -18,9 +19,14 @@ export interface YogaClass {
   name: string;
   teacherIds: string[];
   capacity: number;
+  cost: string;
+  description: string;
+  duration: number;
+  imageUrl?: string | null;
   startDate: Date;
   endDate: Date;
   status: ClassStatus;
+  locationId: number;
   location: Location;
-  private: boolean;
+  isPrivate: boolean;
 }

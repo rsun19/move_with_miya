@@ -42,6 +42,14 @@ export class UsersService {
     return this.prisma.client.user.update({ where: { id }, data: dto });
   }
 
+  async updateLastLogin(id: string): Promise<User> {
+    await this.findById(id);
+    return this.prisma.client.user.update({
+      where: { id },
+      data: { lastLoginAt: new Date() },
+    });
+  }
+
   async remove(id: string): Promise<void> {
     await this.findById(id);
     await this.prisma.client.user.delete({ where: { id } });

@@ -15,6 +15,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { SelfOrAdminGuard } from '../common/guards/self-or-admin.guard';
 import { UserRole } from '../generated/prisma/client';
 
 @Controller('users')
@@ -53,7 +54,7 @@ export class UsersController {
     return this.usersService.findById(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(SelfOrAdminGuard)
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);

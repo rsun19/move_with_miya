@@ -5,11 +5,6 @@ import ClassDetailClient from '@/components/ClassDetailClient';
 import type { AuthUser, Registration, YogaClass } from '@/lib/types';
 import { BACKEND_URL, USER_SERVICE_URL } from '@/lib/env';
 
-export const metadata: Metadata = {
-  title: 'Class Details | Move with Miya',
-  description: 'Class details and registration.',
-};
-
 const STAFF_ROLES = ['ADMIN', 'TEACHER'];
 
 async function fetchClass(id: string): Promise<YogaClass | null> {
@@ -23,6 +18,27 @@ async function fetchClass(id: string): Promise<YogaClass | null> {
     console.error('Failed to load class:', error);
     return null;
   }
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const cls = await fetchClass(id);
+  if (!cls) {
+    return {
+      title: 'Class Details | Move with Miya',
+      description: 'Class details and registration.',
+    };
+  }
+  return {
+    title: `${cls.name} | Move with Miya`,
+    description:
+      cls.description ||
+      `View details and register for ${cls.name} at Move with Miya.`,
+  };
 }
 
 interface Registrant extends Registration {

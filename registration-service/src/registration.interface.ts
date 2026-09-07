@@ -1,7 +1,7 @@
 export enum RegistrationStatus {
-  Registered = 'registered',
-  Waitlisted = 'waitlisted',
-  Canceled = 'canceled',
+  Registered = 'Registered',
+  Waitlisted = 'Waitlisted',
+  Canceled = 'Canceled',
 }
 
 export interface Registration {

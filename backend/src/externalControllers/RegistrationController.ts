@@ -119,12 +119,26 @@ export class RegistrationController {
         'You can only register yourself for a class',
       );
     }
-    await this.assertClassOpenForRegistration(classId);
-    return this.rpc<Registration>('create_registration', { classId, userId });
+    const cls = await this.assertClassOpenForRegistration(classId, userId);
+    return this.rpc<Registration>('create_registration', {
+      classId,
+      userId,
+      capacity: cls.capacity,
+    });
   }
 
-  private async assertClassOpenForRegistration(classId: number) {
-    let cls: { endDate?: string } | null = null;
+  private async assertClassOpenForRegistration(
+    classId: number,
+    userId: string,
+  ): Promise<{
+    capacity: number;
+  }> {
+    let cls: {
+      capacity?: number;
+      endDate?: string;
+      status?: string;
+      isPrivate?: boolean;
+    } | null = null;
     try {
       cls = await lastValueFrom(
         this.classesClient.send({ cmd: 'get_class' }, { id: classId }),
@@ -135,9 +149,51 @@ export class RegistrationController {
     if (!cls) {
       throw new NotFoundException(`Class ${classId} not found`);
     }
-    if (cls.endDate && new Date(cls.endDate).getTime() < Date.now()) {
+    if (cls.status === 'Canceled' || cls.status === 'Completed') {
+      throw new ForbiddenException('This class is not open for registration');
+    }
+    if (cls.endDate && new Date(cls.endDate).getTime() <= Date.now()) {
       throw new ForbiddenException('This class has already ended');
     }
+    const capacity = cls.capacity;
+    if (
+      capacity === undefined ||
+      !Number.isInteger(capacity) ||
+      capacity <= 0
+    ) {
+      throw new ServiceUnavailableException('Class capacity is invalid');
+    }
+
+    const userServiceUrl =
+      process.env.USER_SERVICE_URL || 'http://localhost:3003';
+    let userResponse: Response;
+    try {
+      userResponse = await fetch(`${userServiceUrl}/users/${userId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      throw new ServiceUnavailableException('User service unreachable');
+    }
+    if (userResponse.status >= 500) {
+      throw new ServiceUnavailableException('User service error');
+    }
+    if (!userResponse.ok) {
+      throw new UnauthorizedException('Unable to verify user');
+    }
+    const user = (await userResponse.json()) as {
+      banned?: boolean;
+      yogaExperience?: string | null;
+    };
+    if (user.banned) {
+      throw new ForbiddenException('User is banned');
+    }
+    if (cls.isPrivate && !user.yogaExperience?.trim()) {
+      throw new ForbiddenException(
+        'Yoga experience is required for this class',
+      );
+    }
+
+    return { capacity };
   }
 
   @Get('class/:classId/me')

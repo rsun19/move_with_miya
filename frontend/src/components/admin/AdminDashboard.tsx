@@ -551,7 +551,7 @@ export default function AdminDashboard({
                           label={reg.status}
                           size="small"
                           color={
-                            reg.status === 'registered' ? 'success' : 'default'
+                            reg.status === 'Registered' ? 'success' : 'default'
                           }
                         />
                       </TableCell>

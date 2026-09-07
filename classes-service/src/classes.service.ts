@@ -40,26 +40,60 @@ export class ClassesService {
     return date;
   }
 
+  private parseNonNegativeNumber(value: unknown, field: string): number {
+    const number = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+      throw new BadRequestException(`${field} must be a non-negative number`);
+    }
+    return number;
+  }
+
+  private parsePositiveInteger(value: unknown, field: string): number {
+    const number = typeof value === 'number' ? value : Number(value);
+    if (!Number.isInteger(number) || number <= 0) {
+      throw new BadRequestException(`${field} must be a positive integer`);
+    }
+    return number;
+  }
+
   createClass(data: {
     name: string;
     teacherIds: string[];
     capacity: number;
+    cost?: string | number;
+    description?: string;
+    duration?: number;
+    imageUrl?: string | null;
     startDate: string;
     endDate: string;
     locationId: number;
     status?: string;
-    private?: boolean;
+    isPrivate?: boolean;
   }) {
+    const startDate = this.parseDate(data.startDate, 'startDate');
+    const endDate = this.parseDate(data.endDate, 'endDate');
+    if (endDate <= startDate) {
+      throw new BadRequestException('endDate must be after startDate');
+    }
+    const status = data.status ?? ClassStatus.Scheduled;
+    if (!Object.values(ClassStatus).includes(status as ClassStatus)) {
+      throw new BadRequestException('status is invalid');
+    }
+
     return this.prisma.client.yogaClass.create({
       data: {
         name: data.name,
         teacherIds: data.teacherIds,
-        capacity: data.capacity,
-        startDate: this.parseDate(data.startDate, 'startDate'),
-        endDate: this.parseDate(data.endDate, 'endDate'),
+        capacity: this.parsePositiveInteger(data.capacity, 'capacity'),
+        cost: this.parseNonNegativeNumber(data.cost ?? 0, 'cost'),
+        description: data.description ?? '',
+        duration: this.parsePositiveInteger(data.duration ?? 60, 'duration'),
+        imageUrl: data.imageUrl ?? null,
+        startDate,
+        endDate,
         locationId: data.locationId,
-        status: (data.status as ClassStatus) ?? ClassStatus.Scheduled,
-        isPrivate: data.private ?? false,
+        status: status as ClassStatus,
+        isPrivate: data.isPrivate ?? false,
       },
       include: { location: true },
     });
@@ -72,6 +106,32 @@ export class ClassesService {
     }
     if ('endDate' in updateData) {
       updateData.endDate = this.parseDate(updateData.endDate, 'endDate');
+    }
+    if ('capacity' in updateData) {
+      updateData.capacity = this.parsePositiveInteger(
+        updateData.capacity,
+        'capacity',
+      );
+    }
+    if ('cost' in updateData) {
+      updateData.cost = this.parseNonNegativeNumber(updateData.cost, 'cost');
+    }
+    if ('duration' in updateData) {
+      updateData.duration = this.parsePositiveInteger(
+        updateData.duration,
+        'duration',
+      );
+    }
+    if (
+      'status' in updateData &&
+      !Object.values(ClassStatus).includes(updateData.status as ClassStatus)
+    ) {
+      throw new BadRequestException('status is invalid');
+    }
+    if ('startDate' in updateData && 'endDate' in updateData) {
+      if ((updateData.endDate as Date) <= (updateData.startDate as Date)) {
+        throw new BadRequestException('endDate must be after startDate');
+      }
     }
     return this.prisma.client.yogaClass.update({
       where: { id },
