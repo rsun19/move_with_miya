@@ -1,0 +1,126 @@
+import { of } from 'rxjs';
+import { ClassesController } from './ClassesController';
+
+describe('ClassesController', () => {
+  let controller: ClassesController;
+  let classesClient: { send: jest.Mock };
+  let registrationClient: { send: jest.Mock };
+
+  beforeEach(() => {
+    classesClient = { send: jest.fn() };
+    registrationClient = { send: jest.fn() };
+    controller = new ClassesController(
+      classesClient as never,
+      registrationClient as never,
+    );
+    process.env.USER_SERVICE_URL = 'http://users.test';
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.USER_SERVICE_URL;
+  });
+
+  it('enriches class lists with registration counts and teachers', async () => {
+    const classes = [
+      {
+        id: 1,
+        name: 'Flow',
+        teacherIds: ['teacher-1', 'teacher-2'],
+        capacity: 10,
+        cost: '20',
+        description: '',
+        duration: 60,
+        startDate: '2026-09-10T10:00:00.000Z',
+        endDate: '2026-09-10T11:00:00.000Z',
+        status: 'Scheduled',
+        locationId: 1,
+        location: {},
+        isPrivate: false,
+      },
+    ];
+    classesClient.send.mockReturnValue(of(classes));
+    registrationClient.send.mockReturnValue(of([{ classId: 1, count: 4 }]));
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: 'teacher-1',
+            firstName: 'A',
+            lastName: 'Teacher',
+            role: 'TEACHER',
+          },
+        ]),
+      ),
+    );
+
+    await expect(controller.findClasses()).resolves.toEqual([
+      expect.objectContaining({
+        registrationCount: 4,
+        teachers: [
+          {
+            id: 'teacher-1',
+            firstName: 'A',
+            lastName: 'Teacher',
+            role: 'TEACHER',
+          },
+        ],
+      }),
+    ]);
+    expect(classesClient.send).toHaveBeenCalledWith({ cmd: 'get_classes' }, {});
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'get_registration_counts' },
+      { classIds: [1] },
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'http://users.test/users/batch?ids=teacher-1%2Cteacher-2',
+      { cache: 'no-store' },
+    );
+  });
+
+  it('returns empty lists without making enrichment calls', async () => {
+    classesClient.send.mockReturnValue(of([]));
+    await expect(controller.findClasses()).resolves.toEqual([]);
+    expect(registrationClient.send).not.toHaveBeenCalled();
+  });
+
+  it('forwards range and single-class reads', async () => {
+    classesClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(cmd === 'get_class' ? null : []),
+    );
+
+    await expect(
+      controller.findClassesInRange('2026-09-01', '2026-09-30'),
+    ).resolves.toEqual([]);
+    await expect(controller.findClass(7)).resolves.toBeNull();
+    expect(classesClient.send).toHaveBeenNthCalledWith(
+      1,
+      { cmd: 'get_classes_in_range' },
+      { from: '2026-09-01', to: '2026-09-30' },
+    );
+    expect(classesClient.send).toHaveBeenNthCalledWith(
+      2,
+      { cmd: 'get_class' },
+      { id: 7 },
+    );
+  });
+
+  it('forwards admin class mutations with the route id', async () => {
+    classesClient.send.mockImplementation(() => of('ok'));
+    await expect(controller.createClass({ name: 'Flow' })).resolves.toBe('ok');
+    await expect(controller.updateClass(2, { name: 'New name' })).resolves.toBe(
+      'ok',
+    );
+    await expect(controller.deleteClass(2)).resolves.toBe('ok');
+    expect(classesClient.send).toHaveBeenNthCalledWith(
+      2,
+      { cmd: 'update_class' },
+      { name: 'New name', id: 2 },
+    );
+    expect(classesClient.send).toHaveBeenNthCalledWith(
+      3,
+      { cmd: 'delete_class' },
+      { id: 2 },
+    );
+  });
+});
