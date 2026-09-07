@@ -74,6 +74,9 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
       SESSION_SECRET: ${SESSION_SECRET}
       USER_SERVICE_URL: http://user-service:3001
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      CONTACT_EMAIL_TO: ${CONTACT_EMAIL_TO}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
     depends_on:
       redis:
         condition: service_healthy

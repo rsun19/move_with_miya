@@ -9,6 +9,7 @@ import { RegistrationController } from './externalControllers/RegistrationContro
 import { ContactController } from './externalControllers/ContactController';
 import { AdminGuard } from './common/guards/admin.guard';
 import { StaffGuard } from './common/guards/staff.guard';
+import { ContactEmailService } from './externalControllers/contact-email.service';
 
 @Module({
   imports: [
@@ -44,6 +45,6 @@ import { StaffGuard } from './common/guards/staff.guard';
     RegistrationController,
     ContactController,
   ],
-  providers: [AppService, AdminGuard, StaffGuard],
+  providers: [AppService, AdminGuard, StaffGuard, ContactEmailService],
 })
 export class AppModule {}
