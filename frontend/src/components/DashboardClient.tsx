@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 import Box from '@mui/material/Box';
@@ -14,6 +15,7 @@ import ProfileForm from '@/components/ProfileForm';
 
 export default function DashboardClient({ user }: { user: AuthUser }) {
   const { logout } = useAuth();
+  const [displayedUser, setDisplayedUser] = useState(user);
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -34,27 +36,27 @@ export default function DashboardClient({ user }: { user: AuthUser }) {
       </Box>
       <Card>
         <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {user.avatarUrl && (
+          {displayedUser.avatarUrl && (
             <Avatar
-              src={user.avatarUrl}
+              src={displayedUser.avatarUrl}
               alt=""
               sx={{ width: 56, height: 56 }}
             />
           )}
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">
-              {user.firstName} {user.lastName}
+              {displayedUser.firstName} {displayedUser.lastName}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {user.email}
+              {displayedUser.email}
             </Typography>
           </Box>
-          <RoleBadge role={user.role} />
+          {displayedUser.role && <RoleBadge role={displayedUser.role} />}
         </CardContent>
       </Card>
       <Card sx={{ mt: 3 }}>
         <CardContent>
-          <ProfileForm user={user} />
+          <ProfileForm user={displayedUser} onSaved={setDisplayedUser} />
         </CardContent>
       </Card>
     </Container>
