@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     remotePatterns: [
       {
@@ -10,20 +13,26 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
+    const userService = process.env.USER_SERVICE_URL || 'http://localhost:3003';
+    const backend = process.env.BACKEND_URL || 'http://localhost:3002';
     return [
       {
         source: '/api/auth/:path*',
-        destination: 'http://localhost:3001/auth/:path*',
+        destination: `${userService}/auth/:path*`,
+      },
+      {
+        source: '/api/users/:path*',
+        destination: `${userService}/users/:path*`,
       },
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3000/:path*',
+        destination: `${backend}/:path*`,
       },
     ];
   },
   env: {
     NEXT_PUBLIC_AUTH_URL:
-      process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3001/auth/google',
+      process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3003/auth/google',
   },
 };
 

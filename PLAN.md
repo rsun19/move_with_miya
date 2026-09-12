@@ -18,6 +18,9 @@
 ## Status
 
 - **Prisma migrations** — Done (yogaExperience on User, all three service tables)
+- **Phase 4: Class Browser** — Done
+- **Phase 5: Class Detail and Registration** — Done (including private-class yoga-experience capture, server-side eligibility checks, capacity enforcement, cancellation, and dynamic metadata)
+- **Phase 6: User Profile** — Next
 - **Auth flow** — Need to verify (start services, test Google sign-in)
 
 ---

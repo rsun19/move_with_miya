@@ -16,11 +16,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 
-const navItems = [
-  { label: 'Home', href: '/' },
-  { label: 'Classes', href: '/classes' },
-  { label: 'Contact', href: '/contact' },
-];
+const navItems = [{ label: 'Classes', href: '/classes' }];
 
 export default function Navbar() {
   const { user, logout } = useAuth();

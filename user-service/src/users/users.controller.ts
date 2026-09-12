@@ -1,19 +1,21 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
   Param,
-  ParseUUIDPipe,
   ParseEnumPipe,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { SelfOrAdminGuard } from '../common/guards/self-or-admin.guard';
 import { UserRole } from '../generated/prisma/client';
 
 @Controller('users')
@@ -31,12 +33,28 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Get('batch')
+  async findByIds(@Query('ids') ids: string) {
+    const idList = ids
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const users = await this.usersService.findByIds(idList);
+    return users.map(({ id, firstName, lastName, avatarUrl, role }) => ({
+      id,
+      firstName,
+      lastName,
+      avatarUrl,
+      role,
+    }));
+  }
+
   @Get(':id')
   findById(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.findById(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(SelfOrAdminGuard)
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);

@@ -7,8 +7,8 @@ A microservices-based yoga studio management platform.
 | Service | Tech | Port | Description |
 |---|---|---|---|
 | `frontend` | Next.js | 5173 | Client app |
-| `backend` | NestJS | 3000 | API gateway |
-| `user-service` | Express | 3001 | Auth & user management |
+| `backend` | NestJS | 3002 | API gateway |
+| `user-service` | Express | 3003 | Auth & user management |
 | `classes-service` | Express | — | Class scheduling (event-driven) |
 | `registration-service` | Express | — | Class registrations (event-driven) |
 | `nginx` | nginx | 80 | Reverse proxy |
@@ -19,8 +19,8 @@ A microservices-based yoga studio management platform.
 ```text
 Frontend (port 5173)
   │
-  └── /api/*       →  backend:3000
-  └── /api/auth/*  →  (nginx →) user-service:3001
+  └── /api/*       →  backend:3002
+  └── /api/auth/*  →  (nginx →) user-service:3003
                           │
                           ├── classes-service (RabbitMQ)
                           └── registration-service (RabbitMQ)
@@ -92,19 +92,27 @@ docker compose up -d
 
 > **Warning:** `docker compose down --volumes` deletes the `postgres-data` volume and destroys all database data. Use it only when you intend to reset everything.
 
+Apply Prisma migrations before starting the application services:
+
+```bash
+for service in user-service classes-service registration-service; do
+  (cd "$service" && npx prisma migrate deploy)
+done
+```
+
 ### 5. Start all services
 
 ```bash
 npm run dev
 ```
 
-This starts backend (3000), user-service (3001), classes-service, registration-service, and frontend (5173) in parallel with hot reload.
+This starts backend (3002), user-service (3003), classes-service, registration-service, and frontend (5173) in parallel with hot reload.
 
 Or start individually in separate terminals:
 
 ```bash
-cd backend              && npm run start:dev  # port 3000
-cd user-service         && npm run start:dev  # port 3001
+cd backend              && npm run start:dev  # port 3002
+cd user-service         && npm run start:dev  # port 3003
 cd classes-service      && npm run start:dev
 cd registration-service && npm run start:dev
 cd frontend             && npm run dev        # port 5173

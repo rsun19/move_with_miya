@@ -22,6 +22,13 @@ export class UsersService {
     return user;
   }
 
+  async findByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return this.prisma.client.user.findMany({
+      where: { id: { in: ids } },
+    });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.prisma.client.user.findUnique({ where: { email } });
   }
@@ -33,6 +40,14 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.findById(id);
     return this.prisma.client.user.update({ where: { id }, data: dto });
+  }
+
+  async updateLastLogin(id: string): Promise<User> {
+    await this.findById(id);
+    return this.prisma.client.user.update({
+      where: { id },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   async remove(id: string): Promise<void> {

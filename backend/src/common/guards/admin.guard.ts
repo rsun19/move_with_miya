@@ -23,7 +23,7 @@ export class AdminGuard implements CanActivate {
 
     const userServiceUrl = this.configService.get<string>(
       'USER_SERVICE_URL',
-      'http://localhost:3001',
+      'http://localhost:3003',
     );
 
     let resp: Response;

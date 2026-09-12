@@ -18,9 +18,39 @@ export class RegistrationController {
 
   @MessagePattern({ cmd: 'create_registration' })
   createRegistration(
-    data: { classId: number; userId: string } & Record<string, unknown>,
+    data: { classId: number; userId: string; capacity: number } & Record<
+      string,
+      unknown
+    >,
   ) {
     return this.registrationService.createRegistration(
+      data.classId,
+      data.userId,
+      data.capacity,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get_registrations_by_user' })
+  findRegistrationsByUser(data: { userId: string }) {
+    return this.registrationService.findRegistrationsByUser(data.userId);
+  }
+
+  @MessagePattern({ cmd: 'get_registration_counts' })
+  getRegistrationCounts(data: { classIds: number[] }) {
+    return this.registrationService.getRegistrationCounts(data.classIds);
+  }
+
+  @MessagePattern({ cmd: 'get_registration_by_class_and_user' })
+  findRegistrationByClassAndUser(data: { classId: number; userId: string }) {
+    return this.registrationService.findRegistrationByClassAndUser(
+      data.classId,
+      data.userId,
+    );
+  }
+
+  @MessagePattern({ cmd: 'delete_registration_by_class_and_user' })
+  deleteRegistrationByClassAndUser(data: { classId: number; userId: string }) {
+    return this.registrationService.deleteRegistrationByClassAndUser(
       data.classId,
       data.userId,
     );

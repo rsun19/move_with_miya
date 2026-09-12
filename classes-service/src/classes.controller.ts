@@ -24,13 +24,17 @@ export class ClassesController {
   @MessagePattern({ cmd: 'create_class' })
   createClass(data: {
     name: string;
-    teacherIds: number[];
+    teacherIds: string[];
     capacity: number;
+    cost?: string | number;
+    description?: string;
+    duration?: number;
+    imageUrl?: string | null;
     startDate: string;
     endDate: string;
     locationId: number;
     status?: string;
-    private?: boolean;
+    isPrivate?: boolean;
   }) {
     return this.classesService.createClass(data);
   }

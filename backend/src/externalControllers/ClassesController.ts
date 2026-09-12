@@ -12,36 +12,117 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { lastValueFrom } from 'rxjs';
 import { AdminGuard } from '../common/guards/admin.guard';
+
+interface Teacher {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl?: string | null;
+  role: string;
+}
+
+interface ClassRecord {
+  id: number;
+  name: string;
+  teacherIds: string[];
+  capacity: number;
+  cost: string;
+  description: string;
+  duration: number;
+  startDate: string;
+  endDate: string;
+  status: string;
+  locationId: number;
+  location: Record<string, unknown>;
+  isPrivate: boolean;
+}
 
 @Controller('classes')
 export class ClassesController {
   constructor(
     @Inject('CLASSES_SERVICE') private readonly classesClient: ClientProxy,
+    @Inject('REGISTRATION_SERVICE')
+    private readonly registrationClient: ClientProxy,
   ) {}
 
+  private async rpcClasses<T = unknown>(cmd: string, payload: object) {
+    return lastValueFrom<T>(this.classesClient.send<T>({ cmd }, payload));
+  }
+
+  private async rpcRegistrations<T = unknown>(cmd: string, payload: object) {
+    return lastValueFrom<T>(this.registrationClient.send<T>({ cmd }, payload));
+  }
+
+  private async enrichClasses(classes: ClassRecord[]): Promise<ClassRecord[]> {
+    if (classes.length === 0) return classes;
+
+    const classIds = classes.map((c) => c.id);
+    const [countRows, teacherIds] = await Promise.all([
+      this.rpcRegistrations<{ classId: number; count: number }[]>(
+        'get_registration_counts',
+        { classIds },
+      ),
+      Promise.resolve([...new Set(classes.flatMap((c) => c.teacherIds ?? []))]),
+    ]);
+
+    const counts = new Map(countRows.map((r) => [r.classId, r.count]));
+
+    let teachers: Teacher[] = [];
+    if (teacherIds.length > 0) {
+      const userServiceUrl =
+        process.env.USER_SERVICE_URL || 'http://localhost:3003';
+      const res = await fetch(
+        `${userServiceUrl}/users/batch?ids=${encodeURIComponent(
+          teacherIds.join(','),
+        )}`,
+        { cache: 'no-store' },
+      );
+      if (res.ok) {
+        teachers = (await res.json()) as Teacher[];
+      }
+    }
+    const teacherMap = new Map(teachers.map((t) => [t.id, t]));
+
+    return classes.map((cls) => ({
+      ...cls,
+      registrationCount: counts.get(cls.id) ?? 0,
+      teachers: (cls.teacherIds ?? [])
+        .map((id) => teacherMap.get(id))
+        .filter((t): t is Teacher => t !== undefined),
+    }));
+  }
+
   @Get()
-  findClasses() {
-    return this.classesClient.send({ cmd: 'get_classes' }, {});
+  async findClasses() {
+    const classes = await this.rpcClasses<ClassRecord[]>('get_classes', {});
+    return this.enrichClasses(classes);
   }
 
   @Get('range')
-  findClassesInRange(@Query('from') from: string, @Query('to') to: string) {
-    return this.classesClient.send(
-      { cmd: 'get_classes_in_range' },
+  async findClassesInRange(
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    const classes = await this.rpcClasses<ClassRecord[]>(
+      'get_classes_in_range',
       { from, to },
     );
+    return this.enrichClasses(classes);
   }
 
   @Get(':id')
-  findClass(@Param('id', ParseIntPipe) id: number) {
-    return this.classesClient.send({ cmd: 'get_class' }, { id });
+  async findClass(@Param('id', ParseIntPipe) id: number) {
+    const cls = await this.rpcClasses<ClassRecord | null>('get_class', { id });
+    if (!cls) return null;
+    return (await this.enrichClasses([cls]))[0];
   }
 
   @UseGuards(AdminGuard)
   @Post()
   createClass(@Body() body: Record<string, unknown>) {
-    return this.classesClient.send({ cmd: 'create_class' }, body);
+    return this.rpcClasses('create_class', body);
   }
 
   @UseGuards(AdminGuard)
@@ -50,12 +131,12 @@ export class ClassesController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.classesClient.send({ cmd: 'update_class' }, { ...body, id });
+    return this.rpcClasses('update_class', { ...body, id });
   }
 
   @UseGuards(AdminGuard)
   @Delete(':id')
   deleteClass(@Param('id', ParseIntPipe) id: number) {
-    return this.classesClient.send({ cmd: 'delete_class' }, { id });
+    return this.rpcClasses('delete_class', { id });
   }
 }

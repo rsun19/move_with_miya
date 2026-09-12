@@ -46,7 +46,7 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const port = configService.get<number>('PORT', 3001);
+  const port = configService.get<number>('PORT', 3003);
   await app.listen(port);
   console.log(`user-service listening on http://localhost:${port}`);
 }

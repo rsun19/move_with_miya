@@ -1,12 +1,12 @@
 export enum RegistrationStatus {
-  Registered = 'registered',
-  Waitlisted = 'waitlisted',
-  Canceled = 'canceled',
+  Registered = 'Registered',
+  Waitlisted = 'Waitlisted',
+  Canceled = 'Canceled',
 }
 
 export interface Registration {
   id: number;
-  userId: number;
+  userId: string;
   classId: number;
   status: RegistrationStatus;
   registeredAt: Date;

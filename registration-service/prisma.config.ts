@@ -7,6 +7,6 @@ config({ path: resolve(process.cwd(), '../.env') });
 export default defineConfig({
   schema: './prisma/schema.prisma',
   datasource: {
-    url: env('DATABASE_URL'),
+    url: process.env.REGISTRATION_SERVICE_DATABASE_URL ?? env('DATABASE_URL'),
   },
 });
