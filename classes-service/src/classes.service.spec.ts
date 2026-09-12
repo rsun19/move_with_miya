@@ -18,8 +18,10 @@ describe('ClassesService date validation', () => {
       update: jest.Mock;
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       delete: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -29,8 +31,12 @@ describe('ClassesService date validation', () => {
         update: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         delete: jest.fn(),
       },
+      $transaction: jest.fn((callback: (tx: typeof prisma) => unknown) =>
+        callback(prisma),
+      ),
     };
 
     const module = await Test.createTestingModule({
@@ -165,6 +171,10 @@ describe('ClassesService date validation', () => {
     });
 
     it('converts a valid startDate to a Date', async () => {
+      prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
+        startDate: new Date('2026-09-01T09:00:00.000Z'),
+        endDate: new Date('2026-09-01T11:00:00.000Z'),
+      });
       prisma.yogaClass.update.mockResolvedValue({ id: 1 });
       await service.updateClass(1, { startDate: '2026-09-01T10:00:00.000Z' });
       expect(prisma.yogaClass.update).toHaveBeenCalledWith(
@@ -174,6 +184,22 @@ describe('ClassesService date validation', () => {
           }) as never,
         }) as never,
       );
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function) as never,
+        { isolationLevel: 'Serializable' },
+      );
+    });
+
+    it('validates an endDate against the persisted startDate', async () => {
+      prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
+        startDate: new Date('2026-09-01T10:00:00.000Z'),
+        endDate: new Date('2026-09-01T11:00:00.000Z'),
+      });
+
+      await expect(
+        service.updateClass(1, { endDate: '2026-09-01T09:00:00.000Z' }),
+      ).rejects.toThrow('endDate must be after startDate');
+      expect(prisma.yogaClass.update).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid startDate', () => {

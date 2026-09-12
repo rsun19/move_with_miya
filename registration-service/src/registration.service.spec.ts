@@ -181,6 +181,27 @@ describe('RegistrationService', () => {
     });
   });
 
+  it('retries a serializable transaction conflict', async () => {
+    prisma.$transaction.mockRejectedValueOnce({ code: 'P2034' });
+    prisma.registration.findFirst.mockResolvedValue(null);
+    prisma.registration.create.mockResolvedValue(existing);
+
+    await expect(service.createRegistration(10, 'user-2', 10)).resolves.toEqual(
+      existing,
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates a transaction conflict after retries', async () => {
+    const conflict = { code: 'P2034' };
+    prisma.$transaction.mockRejectedValue(conflict);
+
+    await expect(service.createRegistration(10, 'user-2', 10)).rejects.toEqual(
+      conflict,
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+  });
+
   it('rejects duplicate registration with 409', async () => {
     prisma.registration.findFirst.mockResolvedValue(existing);
 

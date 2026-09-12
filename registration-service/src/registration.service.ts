@@ -49,49 +49,55 @@ export class RegistrationService {
     if (!Number.isInteger(capacity) || capacity <= 0) {
       throw new RpcError(400, 'Class capacity is invalid');
     }
-    try {
-      return await this.prisma.client.$transaction(
-        async (tx) => {
-          const existing = await tx.registration.findFirst({
-            where: { classId, userId },
-          });
-          if (existing && existing.status !== 'Canceled') {
-            throw new RpcError(409, 'Already registered for this class');
-          }
+    const maxAttempts = 3;
 
-          const registeredCount = await tx.registration.count({
-            where: { classId, status: 'Registered' },
-          });
-          if (registeredCount >= capacity) {
-            throw new RpcError(409, 'Class is full');
-          }
-
-          if (existing) {
-            return tx.registration.update({
-              where: { id: existing.id },
-              data: { status: 'Registered', registeredAt: new Date() },
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.client.$transaction(
+          async (tx) => {
+            const existing = await tx.registration.findFirst({
+              where: { classId, userId },
             });
-          }
+            if (existing && existing.status !== 'Canceled') {
+              throw new RpcError(409, 'Already registered for this class');
+            }
 
-          return tx.registration.create({
-            data: {
-              classId,
-              userId,
-              status: 'Registered',
-            },
-          });
-        },
-        { isolationLevel: 'Serializable' },
-      );
-    } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') {
-        throw new RpcError(409, 'Already registered for this class');
+            const registeredCount = await tx.registration.count({
+              where: { classId, status: 'Registered' },
+            });
+            if (registeredCount >= capacity) {
+              throw new RpcError(409, 'Class is full');
+            }
+
+            if (existing) {
+              return tx.registration.update({
+                where: { id: existing.id },
+                data: { status: 'Registered', registeredAt: new Date() },
+              });
+            }
+
+            return tx.registration.create({
+              data: {
+                classId,
+                userId,
+                status: 'Registered',
+              },
+            });
+          },
+          { isolationLevel: 'Serializable' },
+        );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'P2002') {
+          throw new RpcError(409, 'Already registered for this class');
+        }
+        if (code !== 'P2034' || attempt === maxAttempts) {
+          throw error;
+        }
       }
-      if ((error as { code?: string }).code === 'P2034') {
-        throw new RpcError(409, 'Class is full');
-      }
-      throw error;
     }
+
+    throw new Error('Registration transaction did not complete');
   }
 
   async findRegistrationByClassAndUser(classId: number, userId: string) {

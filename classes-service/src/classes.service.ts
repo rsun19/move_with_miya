@@ -128,16 +128,43 @@ export class ClassesService {
     ) {
       throw new BadRequestException('status is invalid');
     }
-    if ('startDate' in updateData && 'endDate' in updateData) {
-      if ((updateData.endDate as Date) <= (updateData.startDate as Date)) {
-        throw new BadRequestException('endDate must be after startDate');
-      }
+    const hasScheduleUpdate =
+      'startDate' in updateData || 'endDate' in updateData;
+    if (!hasScheduleUpdate) {
+      return this.prisma.client.yogaClass.update({
+        where: { id },
+        data: updateData,
+        include: { location: true },
+      });
     }
-    return this.prisma.client.yogaClass.update({
-      where: { id },
-      data: updateData,
-      include: { location: true },
-    });
+
+    return this.prisma.client.$transaction(
+      async (tx) => {
+        const persistedClass = await tx.yogaClass.findUniqueOrThrow({
+          where: { id },
+          select: { startDate: true, endDate: true },
+        });
+        const startDate = (
+          'startDate' in updateData
+            ? updateData.startDate
+            : persistedClass.startDate
+        ) as Date;
+        const endDate = (
+          'endDate' in updateData ? updateData.endDate : persistedClass.endDate
+        ) as Date;
+
+        if (endDate <= startDate) {
+          throw new BadRequestException('endDate must be after startDate');
+        }
+
+        return tx.yogaClass.update({
+          where: { id },
+          data: updateData,
+          include: { location: true },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   deleteClass(id: number) {
