@@ -1,12 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Script from 'next/script';
 import { api } from '@/lib/api';
+
+declare global {
+  interface Window {
+    turnstile?: { reset: () => void };
+  }
+}
 
 interface ContactFields {
   name: string;
@@ -22,11 +29,43 @@ const initialFields: ContactFields = {
   message: '',
 };
 
+const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
 export default function ContactForm() {
   const [fields, setFields] = useState<ContactFields>(initialFields);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactChallenge, setContactChallenge] = useState('');
+
+  const loadContactChallenge = useCallback(async (reportError = true) => {
+    try {
+      const challenge = await api<{ token: string }>('/api/contact/challenge');
+      setContactChallenge(challenge.token);
+    } catch {
+      setContactChallenge('');
+      if (reportError) {
+        setError('Contact verification is currently unavailable.');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void api<{ token: string }>('/api/contact/challenge')
+      .then((challenge) => {
+        if (active) setContactChallenge(challenge.token);
+      })
+      .catch(() => {
+        if (active) {
+          setContactChallenge('');
+          setError('Contact verification is currently unavailable.');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const updateField = (field: keyof ContactFields, value: string) => {
     setFields((previous) => ({ ...previous, [field]: value }));
@@ -52,19 +91,41 @@ export default function ContactForm() {
       setSubmitted(false);
       return;
     }
+    const turnstileToken = new FormData(event.currentTarget).get(
+      'turnstileToken',
+    );
+    if (typeof turnstileToken !== 'string' || !turnstileToken) {
+      setError('Please complete the verification challenge.');
+      setSubmitted(false);
+      return;
+    }
+    if (!contactChallenge) {
+      setError('Please wait a moment and try again.');
+      setSubmitted(false);
+      void loadContactChallenge();
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
     try {
       await api('/api/contact', {
         method: 'POST',
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          turnstileToken,
+          contactChallenge,
+        }),
       });
       setFields(initialFields);
       setSubmitted(true);
+      window.turnstile?.reset();
+      await loadContactChallenge();
     } catch (err) {
+      window.turnstile?.reset();
       setError(err instanceof Error ? err.message : 'Could not send message.');
       setSubmitted(false);
+      void loadContactChallenge(false);
     } finally {
       setSubmitting(false);
     }
@@ -87,6 +148,25 @@ export default function ContactForm() {
         </Alert>
       )}
       {error && <Alert severity="error">{error}</Alert>}
+
+      {turnstileSiteKey ? (
+        <>
+          <Script
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+            strategy="afterInteractive"
+          />
+          <div
+            className="cf-turnstile"
+            data-sitekey={turnstileSiteKey}
+            data-action="contact"
+            data-appearance="always"
+            data-response-field-name="turnstileToken"
+            data-theme="auto"
+          />
+        </>
+      ) : (
+        <Alert severity="error">Contact verification is not configured.</Alert>
+      )}
 
       <TextField
         label="Name"

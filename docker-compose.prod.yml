@@ -77,6 +77,14 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       CONTACT_EMAIL_TO: ${CONTACT_EMAIL_TO}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Move with Miya <onboarding@resend.dev>}
+      CONTACT_CHALLENGE_SECRET: ${CONTACT_CHALLENGE_SECRET}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
+      TURNSTILE_ACTION: ${TURNSTILE_ACTION:-contact}
+      TURNSTILE_HOSTNAME: ${TURNSTILE_HOSTNAME}
+      CONTACT_IP_ATTEMPT_LIMIT: ${CONTACT_IP_ATTEMPT_LIMIT:-100}
+      CONTACT_IP_ATTEMPT_TTL_MS: ${CONTACT_IP_ATTEMPT_TTL_MS:-600000}
+      CONTACT_COOKIE_SUBMISSION_LIMIT: ${CONTACT_COOKIE_SUBMISSION_LIMIT:-3}
+      CONTACT_COOKIE_SUBMISSION_TTL_MS: ${CONTACT_COOKIE_SUBMISSION_TTL_MS:-3600000}
     depends_on:
       redis:
         condition: service_healthy
@@ -119,6 +127,7 @@ services:
       dockerfile: Dockerfile.prod
       args:
         NEXT_PUBLIC_AUTH_URL: ${NEXT_PUBLIC_AUTH_URL:-https://example.com/api/auth/google}
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
     restart: unless-stopped
     environment:
       NODE_ENV: production

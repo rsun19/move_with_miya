@@ -10,6 +10,11 @@ import { ContactController } from './externalControllers/ContactController';
 import { AdminGuard } from './common/guards/admin.guard';
 import { StaffGuard } from './common/guards/staff.guard';
 import { ContactEmailService } from './externalControllers/contact-email.service';
+import { ContactChallengeService } from './externalControllers/contact-challenge.service';
+import { ContactRateLimitService } from './externalControllers/contact-rate-limit.service';
+import { TurnstileService } from './externalControllers/turnstile.service';
+import { ContactRateLimitGuard } from './common/guards/contact-rate-limit.guard';
+import { RedisService } from './redis.service';
 
 @Module({
   imports: [
@@ -45,6 +50,16 @@ import { ContactEmailService } from './externalControllers/contact-email.service
     RegistrationController,
     ContactController,
   ],
-  providers: [AppService, AdminGuard, StaffGuard, ContactEmailService],
+  providers: [
+    AppService,
+    AdminGuard,
+    StaffGuard,
+    ContactEmailService,
+    ContactChallengeService,
+    TurnstileService,
+    ContactRateLimitService,
+    ContactRateLimitGuard,
+    RedisService,
+  ],
 })
 export class AppModule {}
