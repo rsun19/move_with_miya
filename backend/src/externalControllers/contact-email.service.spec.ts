@@ -43,6 +43,19 @@ describe('ContactEmailService', () => {
     expect(options.body).toContain('studio@example.com');
   });
 
+  it('does not call Resend when the configured sender is empty', async () => {
+    const config = new ConfigService({
+      RESEND_API_KEY: 're_test_key',
+      CONTACT_EMAIL_TO: 'studio@example.com',
+      RESEND_FROM_EMAIL: '',
+    });
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
+    await new ContactEmailService(config).notify(submission);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('swallows provider failures after the submission is saved', async () => {
     const config = new ConfigService({
       RESEND_API_KEY: 're_test_key',

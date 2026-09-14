@@ -1,4 +1,10 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateContactSubmissionDto {
   @IsString()
@@ -19,4 +25,14 @@ export class CreateContactSubmissionDto {
   @MinLength(1)
   @MaxLength(10000)
   message: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2048)
+  turnstileToken: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
+  contactChallenge: string;
 }

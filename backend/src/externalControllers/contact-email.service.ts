@@ -28,6 +28,12 @@ export class ContactEmailService {
       'RESEND_FROM_EMAIL',
       'Move with Miya <onboarding@resend.dev>',
     );
+    if (!sender) {
+      this.logger.debug(
+        'Skipping contact notification because the sender is not configured',
+      );
+      return;
+    }
 
     try {
       const response = await fetch('https://api.resend.com/emails', {
