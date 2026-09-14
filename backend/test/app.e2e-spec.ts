@@ -4,7 +4,11 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminGuard } from './../src/common/guards/admin.guard';
+import { ContactRateLimitGuard } from './../src/common/guards/contact-rate-limit.guard';
+import { ContactChallengeService } from './../src/externalControllers/contact-challenge.service';
 import { ContactEmailService } from './../src/externalControllers/contact-email.service';
+import { ContactRateLimitService } from './../src/externalControllers/contact-rate-limit.service';
+import { TurnstileService } from './../src/externalControllers/turnstile.service';
 import { of } from 'rxjs';
 
 describe('AppController (e2e)', () => {
@@ -33,6 +37,23 @@ describe('AppController (e2e)', () => {
       .useValue({ send: jest.fn().mockReturnValue(of([])) })
       .overrideProvider(ContactEmailService)
       .useValue({ notify: jest.fn().mockResolvedValue(undefined) })
+      .overrideProvider(ContactChallengeService)
+      .useValue({ isValid: jest.fn().mockReturnValue(true) })
+      .overrideProvider(ContactRateLimitService)
+      .useValue({
+        getVisitorId: jest.fn().mockReturnValue('visitor-id'),
+        applyHeaders: jest.fn(),
+        consumeVerifiedSubmission: jest.fn().mockResolvedValue({
+          allowed: true,
+          limit: 3,
+          remaining: 2,
+          resetSeconds: 60,
+        }),
+      })
+      .overrideProvider(TurnstileService)
+      .useValue({ verify: jest.fn().mockResolvedValue(true) })
+      .overrideGuard(ContactRateLimitGuard)
+      .useValue({ canActivate: () => true })
       .overrideGuard(AdminGuard)
       .useValue({ canActivate: () => true })
       .compile();
@@ -56,7 +77,10 @@ describe('AppController (e2e)', () => {
         email: ' person@example.com ',
         subject: ' Question ',
         message: ' Hello studio ',
+        turnstileToken: 'test-turnstile-token',
+        contactChallenge: 'test-contact-challenge',
       })
+      .set('Cookie', 'contact_visitor=visitor-id')
       .expect(201)
       .expect({ id: 1, name: 'A Person' });
   });
@@ -69,7 +93,10 @@ describe('AppController (e2e)', () => {
         email: 'person@example.com',
         subject: 'Question',
         message: 'Hello',
+        turnstileToken: 'test-turnstile-token',
+        contactChallenge: 'test-contact-challenge',
       })
+      .set('Cookie', 'contact_visitor=visitor-id')
       .expect(400);
   });
 
