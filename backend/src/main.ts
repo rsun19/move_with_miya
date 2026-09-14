@@ -1,29 +1,34 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import session from 'express-session';
-import { createClient } from 'redis';
+import { AppModule } from './app.module';
+import { RedisService } from './redis.service';
+import type { RedisClient } from './redis.service';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { RedisStore } = require('connect-redis') as {
   RedisStore: new (opts: {
-    client: import('redis').RedisClientType;
+    client: RedisClient;
   }) => import('express-session').Store;
 };
-import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
-  const redisClient = createClient({
-    url: configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
-  });
-  await redisClient.connect();
+  app.set(
+    'trust proxy',
+    configService.get<string>('NODE_ENV') === 'production' ? 1 : false,
+  );
+
+  const redisService = app.get(RedisService);
+  await redisService.connect();
 
   app.use(
     session({
-      store: new RedisStore({ client: redisClient }),
+      store: new RedisStore({ client: redisService.getClient() }),
       secret: configService.get<string>(
         'SESSION_SECRET',
         'dev-secret-change-in-production',
