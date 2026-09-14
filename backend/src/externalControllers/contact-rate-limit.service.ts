@@ -123,13 +123,13 @@ export class ContactRateLimitService {
     const result = await this.redisService
       .getClient()
       .sendCommand(['EVAL', INCREMENT_SCRIPT, '1', key, String(ttlMs)]);
-    const [countValue, ttlValue] = result as unknown as [
+    const [countValue] = result as unknown as [
       string | number,
       string | number,
     ];
     const count = Number(countValue);
-    const ttl = Math.max(1, Number(ttlValue));
-    const resetSeconds = Math.max(1, Math.ceil(ttl / 1000));
+    const remainingWindowMs = ttlMs - (Date.now() % ttlMs);
+    const resetSeconds = Math.max(1, Math.ceil(remainingWindowMs / 1000));
 
     return {
       allowed: count <= limit,

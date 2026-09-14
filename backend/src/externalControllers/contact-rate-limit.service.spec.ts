@@ -25,14 +25,19 @@ describe('ContactRateLimitService', () => {
     sendCommand.mockResolvedValue(['1', '60000']);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('uses an atomic Redis script and allows requests through the configured limit', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_234_000);
     const service = new ContactRateLimitService(redisService, config);
 
     await expect(service.consumeIp('198.51.100.10')).resolves.toEqual({
       allowed: true,
       limit: 2,
       remaining: 1,
-      resetSeconds: 60,
+      resetSeconds: 26,
     });
     expect(sendCommand).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -46,6 +51,7 @@ describe('ContactRateLimitService', () => {
   });
 
   it('blocks after the limit and never reports negative remaining capacity', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_259_999);
     sendCommand.mockResolvedValue(['3', '1000']);
     const service = new ContactRateLimitService(redisService, config);
 

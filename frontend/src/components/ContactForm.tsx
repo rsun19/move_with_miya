@@ -38,13 +38,15 @@ export default function ContactForm() {
   const [error, setError] = useState<string | null>(null);
   const [contactChallenge, setContactChallenge] = useState('');
 
-  const loadContactChallenge = useCallback(async () => {
+  const loadContactChallenge = useCallback(async (reportError = true) => {
     try {
       const challenge = await api<{ token: string }>('/api/contact/challenge');
       setContactChallenge(challenge.token);
     } catch {
       setContactChallenge('');
-      setError('Contact verification is currently unavailable.');
+      if (reportError) {
+        setError('Contact verification is currently unavailable.');
+      }
     }
   }, []);
 
@@ -100,6 +102,7 @@ export default function ContactForm() {
     if (!contactChallenge) {
       setError('Please wait a moment and try again.');
       setSubmitted(false);
+      void loadContactChallenge();
       return;
     }
 
@@ -122,6 +125,7 @@ export default function ContactForm() {
       window.turnstile?.reset();
       setError(err instanceof Error ? err.message : 'Could not send message.');
       setSubmitted(false);
+      void loadContactChallenge(false);
     } finally {
       setSubmitting(false);
     }
