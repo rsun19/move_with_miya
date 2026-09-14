@@ -35,6 +35,11 @@ export class RegistrationController {
     return this.registrationService.findRegistrationsByUser(data.userId);
   }
 
+  @MessagePattern({ cmd: 'get_all_registrations' })
+  findAllRegistrations() {
+    return this.registrationService.findAllRegistrations();
+  }
+
   @MessagePattern({ cmd: 'get_registration_counts' })
   getRegistrationCounts(data: { classIds: number[] }) {
     return this.registrationService.getRegistrationCounts(data.classIds);
@@ -85,5 +90,13 @@ export class RegistrationController {
   @MessagePattern({ cmd: 'get_contact_submissions' })
   getContactSubmissions(data: { take?: number; skip?: number }) {
     return this.registrationService.getContactSubmissions(data.take, data.skip);
+  }
+
+  @MessagePattern({ cmd: 'mark_contact_submission_read' })
+  markContactSubmissionRead(data: { id: number; read: boolean }) {
+    return this.registrationService.markContactSubmissionRead(
+      data.id,
+      data.read,
+    );
   }
 }

@@ -31,5 +31,6 @@ model ContactSubmission {
   email     String
   subject   String
   message   String
+  read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }

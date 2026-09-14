@@ -24,6 +24,12 @@ export class RegistrationService {
     });
   }
 
+  findAllRegistrations() {
+    return this.prisma.client.registration.findMany({
+      orderBy: [{ registeredAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+
   async getRegistrationCounts(classIds: number[]) {
     if (classIds.length === 0) return [];
     const grouped = await this.prisma.client.registration.groupBy({
@@ -154,5 +160,19 @@ export class RegistrationService {
       skip,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
+  }
+
+  async markContactSubmissionRead(id: number, read: boolean) {
+    try {
+      return await this.prisma.client.contactSubmission.update({
+        where: { id },
+        data: { read },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2025') {
+        throw new RpcError(404, `Contact submission ${id} not found`);
+      }
+      throw error;
+    }
   }
 }

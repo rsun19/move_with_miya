@@ -8,6 +8,7 @@ import type {
   AuthUser,
   ContactSubmission,
   Location,
+  Registration,
   YogaClass,
 } from '@/lib/types';
 import { BACKEND_URL, USER_SERVICE_URL } from '@/lib/env';
@@ -24,12 +25,14 @@ async function fetchAdminData(cookieString: string) {
     cookie: cookieString,
   };
 
-  const [classesRes, locationsRes, contactRes, usersRes] = await Promise.all([
-    fetch(`${BACKEND_URL}/classes`, { cache: 'no-store', headers }),
-    fetch(`${BACKEND_URL}/locations`, { cache: 'no-store', headers }),
-    fetch(`${BACKEND_URL}/contact`, { cache: 'no-store', headers }),
-    fetch(`${USER_SERVICE_URL}/users`, { cache: 'no-store', headers }),
-  ]);
+  const [classesRes, locationsRes, contactRes, usersRes, registrationsRes] =
+    await Promise.all([
+      fetch(`${BACKEND_URL}/classes`, { cache: 'no-store', headers }),
+      fetch(`${BACKEND_URL}/locations`, { cache: 'no-store', headers }),
+      fetch(`${BACKEND_URL}/contact`, { cache: 'no-store', headers }),
+      fetch(`${USER_SERVICE_URL}/users`, { cache: 'no-store', headers }),
+      fetch(`${BACKEND_URL}/registration`, { cache: 'no-store', headers }),
+    ]);
 
   const classes: YogaClass[] = classesRes.ok ? await classesRes.json() : [];
   const locations: Location[] = locationsRes.ok
@@ -39,8 +42,11 @@ async function fetchAdminData(cookieString: string) {
     ? await contactRes.json()
     : [];
   const users: AdminUser[] = usersRes.ok ? await usersRes.json() : [];
+  const registrations: Registration[] = registrationsRes.ok
+    ? await registrationsRes.json()
+    : [];
 
-  return { classes, locations, contact, users };
+  return { classes, locations, contact, users, registrations };
 }
 
 export default async function AdminPage() {
@@ -76,6 +82,7 @@ export default async function AdminPage() {
         initialLocations={data.locations}
         initialContact={data.contact}
         initialUsers={data.users}
+        initialRegistrations={data.registrations}
       />
     </Box>
   );

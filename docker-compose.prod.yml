@@ -76,7 +76,7 @@ services:
       USER_SERVICE_URL: http://user-service:3001
       RESEND_API_KEY: ${RESEND_API_KEY}
       CONTACT_EMAIL_TO: ${CONTACT_EMAIL_TO}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Move with Miya <onboarding@resend.dev>}
       CONTACT_CHALLENGE_SECRET: ${CONTACT_CHALLENGE_SECRET}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
       TURNSTILE_ACTION: ${TURNSTILE_ACTION:-contact}
@@ -140,7 +140,7 @@ services:
       - '80:80'
       - '443:443'
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro,z
     restart: unless-stopped
     depends_on:
       - backend

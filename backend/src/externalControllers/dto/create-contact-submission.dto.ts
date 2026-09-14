@@ -1,29 +1,31 @@
-import {
-  IsEmail,
-  IsNotEmpty,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
+function trimString(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim() : value;
+}
 export class CreateContactSubmissionDto {
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty()
   @MaxLength(255)
+  @Transform(({ value }) => trimString(value as unknown))
   name: string;
 
   @IsEmail()
   @MaxLength(255)
+  @Transform(({ value }) => trimString(value as unknown))
   email: string;
 
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty()
   @MaxLength(500)
+  @Transform(({ value }) => trimString(value as unknown))
   subject: string;
 
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty()
   @MaxLength(10000)
+  @Transform(({ value }) => trimString(value as unknown))
   message: string;
 
   @IsString()

@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Request, Response } from 'express';
-import { of } from 'rxjs';
+import { lastValueFrom, of } from 'rxjs';
 import { ContactRateLimitGuard } from '../common/guards/contact-rate-limit.guard';
 import { ContactController } from './ContactController';
 import { ContactChallengeService } from './contact-challenge.service';
@@ -203,5 +203,18 @@ describe('ContactController', () => {
       expect.objectContaining({ status: 503 }),
     );
     expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('marks a contact submission read or unread', async () => {
+    const updated = { id: 4, read: true };
+    client.send.mockReturnValue(of(updated));
+
+    await expect(
+      lastValueFrom(controller.markRead(4, { read: true })),
+    ).resolves.toEqual(updated);
+    expect(client.send).toHaveBeenCalledWith(
+      { cmd: 'mark_contact_submission_read' },
+      { id: 4, read: true },
+    );
   });
 });

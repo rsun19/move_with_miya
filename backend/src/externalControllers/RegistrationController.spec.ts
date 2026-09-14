@@ -228,4 +228,62 @@ describe('RegistrationController', () => {
       });
     });
   });
+
+  describe('admin registration listing', () => {
+    it('returns all registrations enriched with users and class details', async () => {
+      const registration = {
+        id: 9,
+        classId: 3,
+        userId: 'user-1',
+        status: 'Registered',
+        registeredAt: '2026-09-01T10:00:00.000Z',
+      };
+      client.send.mockReturnValue(of([registration]));
+      classesClient.send.mockReturnValue(
+        of([
+          {
+            id: 3,
+            name: 'Morning Flow',
+            startDate: '2026-09-05T10:00:00.000Z',
+            endDate: '2026-09-05T11:00:00.000Z',
+          },
+        ]),
+      );
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              id: 'user-1',
+              firstName: 'Miya',
+              lastName: 'Sun',
+              role: 'MEMBER',
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+      await expect(controller.findAllRegistrations()).resolves.toEqual([
+        {
+          ...registration,
+          user: {
+            id: 'user-1',
+            firstName: 'Miya',
+            lastName: 'Sun',
+            role: 'MEMBER',
+          },
+          class: {
+            id: 3,
+            name: 'Morning Flow',
+            startDate: '2026-09-05T10:00:00.000Z',
+            endDate: '2026-09-05T11:00:00.000Z',
+          },
+        },
+      ]);
+      expect(client.send).toHaveBeenCalledWith(
+        { cmd: 'get_all_registrations' },
+        {},
+      );
+    });
+  });
 });

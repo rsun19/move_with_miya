@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -46,6 +45,7 @@ interface AdminDashboardProps {
   initialLocations: Location[];
   initialContact: ContactSubmission[];
   initialUsers: AdminUser[];
+  initialRegistrations: Registration[];
 }
 
 type TabValue = 'classes' | 'locations' | 'registrations' | 'contact' | 'users';
@@ -77,12 +77,15 @@ export default function AdminDashboard({
   initialLocations,
   initialContact,
   initialUsers,
+  initialRegistrations,
 }: AdminDashboardProps) {
   const [tab, setTab] = useState<TabValue>('classes');
   const [classes, setClasses] = useState<YogaClass[]>(initialClasses);
   const [locations, setLocations] = useState<Location[]>(initialLocations);
-  const [contact] = useState<ContactSubmission[]>(initialContact);
+  const [contact, setContact] = useState<ContactSubmission[]>(initialContact);
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
+  const [registrations, setRegistrations] =
+    useState<Registration[]>(initialRegistrations);
 
   const [classDialog, setClassDialog] = useState(false);
   const [editingClass, setEditingClass] = useState<YogaClass | null>(null);
@@ -94,8 +97,8 @@ export default function AdminDashboard({
   const [locationForm, setLocationForm] = useState(emptyLocationForm);
 
   const [selectedClassId, setSelectedClassId] = useState<string>('');
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [registrationFrom, setRegistrationFrom] = useState('');
+  const [registrationTo, setRegistrationTo] = useState('');
 
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,29 +112,8 @@ export default function AdminDashboard({
     setNotice(null);
   };
 
-  const loadRegistrations = useCallback(async (classId: string) => {
-    if (!classId) {
-      setRegistrations([]);
-      return;
-    }
-    setRegistrationsLoading(true);
-    try {
-      const data = await api<Registration[]>(
-        `/api/registration/class/${classId}`,
-      );
-      setRegistrations(data);
-    } catch {
-      setRegistrations([]);
-    } finally {
-      setRegistrationsLoading(false);
-    }
-  }, []);
-
   const handleTabChange = (value: TabValue) => {
     setTab(value);
-    if (value === 'registrations' && selectedClassId) {
-      void loadRegistrations(selectedClassId);
-    }
   };
 
   const openNewClass = () => {
@@ -304,14 +286,57 @@ export default function AdminDashboard({
     if (!confirm('Cancel this registration?')) return;
     try {
       await api(`/api/registration/${id}`, { method: 'DELETE' });
-      if (selectedClassId) {
-        await loadRegistrations(selectedClassId);
-      }
+      setRegistrations((previous) => previous.filter((reg) => reg.id !== id));
       showNotice('Registration cancelled.');
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Cancel failed.');
     }
   };
+
+  const markContactRead = async (item: ContactSubmission) => {
+    try {
+      await api(`/api/contact/${item.id}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ read: !item.read }),
+      });
+      setContact((previous) =>
+        previous.map((submission) =>
+          submission.id === item.id
+            ? { ...submission, read: !item.read }
+            : submission,
+        ),
+      );
+      showNotice(
+        item.read ? 'Submission marked unread.' : 'Submission marked read.',
+      );
+    } catch (err) {
+      showError(
+        err instanceof Error ? err.message : 'Read status update failed.',
+      );
+    }
+  };
+
+  const visibleRegistrations = registrations.filter((registration) => {
+    if (selectedClassId && String(registration.classId) !== selectedClassId) {
+      return false;
+    }
+    const startDate = registration.class?.startDate;
+    if (!startDate) return !registrationFrom && !registrationTo;
+    const start = new Date(startDate).getTime();
+    if (
+      registrationFrom &&
+      start < new Date(`${registrationFrom}T00:00:00`).getTime()
+    ) {
+      return false;
+    }
+    if (
+      registrationTo &&
+      start > new Date(`${registrationTo}T23:59:59.999`).getTime()
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const updateUserRole = async (id: string, role: string) => {
     try {
@@ -493,32 +518,46 @@ export default function AdminDashboard({
 
       {tab === 'registrations' && (
         <Stack spacing={2}>
-          <FormControl sx={{ maxWidth: 320 }}>
-            <InputLabel id="reg-class-label">Class</InputLabel>
-            <Select
-              labelId="reg-class-label"
-              label="Class"
-              value={selectedClassId}
-              onChange={(e) => {
-                const id = e.target.value as string;
-                setSelectedClassId(id);
-                if (id) {
-                  void loadRegistrations(id);
-                }
-              }}
-            >
-              {classes.map((cls) => (
-                <MenuItem key={cls.id} value={String(cls.id)}>
-                  {cls.name} —{' '}
-                  {format(new Date(cls.startDate), 'MMM d, h:mm a')}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <FormControl sx={{ minWidth: 280 }}>
+              <InputLabel id="reg-class-label">Class</InputLabel>
+              <Select
+                labelId="reg-class-label"
+                label="Class"
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value as string)}
+              >
+                <MenuItem value="">All classes</MenuItem>
+                {classes.map((cls) => (
+                  <MenuItem key={cls.id} value={String(cls.id)}>
+                    {cls.name} —{' '}
+                    {format(new Date(cls.startDate), 'MMM d, h:mm a')}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="From"
+              type="date"
+              value={registrationFrom}
+              onChange={(event) => setRegistrationFrom(event.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <TextField
+              label="To"
+              type="date"
+              value={registrationTo}
+              onChange={(event) => setRegistrationTo(event.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </Stack>
 
-          {registrationsLoading && <CircularProgress size={24} />}
+          <Typography variant="body2" color="text.secondary">
+            Showing {visibleRegistrations.length} of {registrations.length}{' '}
+            registrations.
+          </Typography>
 
-          {!registrationsLoading && selectedClassId && (
+          {selectedClassId || registrations.length > 0 ? (
             <TableContainer component={Paper}>
               <Table size="small">
                 <TableHead>
@@ -531,7 +570,7 @@ export default function AdminDashboard({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {registrations.map((reg) => (
+                  {visibleRegistrations.map((reg) => (
                     <TableRow key={reg.id}>
                       <TableCell>{reg.id}</TableCell>
                       <TableCell>
@@ -544,6 +583,13 @@ export default function AdminDashboard({
                           sx={{ display: 'block' }}
                         >
                           {reg.user ? reg.user.role : ''}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: 'block' }}
+                        >
+                          {reg.class?.name ?? `Class ${reg.classId}`}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -569,16 +615,18 @@ export default function AdminDashboard({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {registrations.length === 0 && (
+                  {visibleRegistrations.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} align="center">
-                        No registrations for this class.
+                        No registrations match these filters.
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </TableContainer>
+          ) : (
+            <Alert severity="info">No registrations yet.</Alert>
           )}
         </Stack>
       )}
@@ -593,6 +641,7 @@ export default function AdminDashboard({
                 <TableCell>Email</TableCell>
                 <TableCell>Subject</TableCell>
                 <TableCell>Message</TableCell>
+                <TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -605,11 +654,26 @@ export default function AdminDashboard({
                   <TableCell>{item.email}</TableCell>
                   <TableCell>{item.subject}</TableCell>
                   <TableCell sx={{ maxWidth: 320 }}>{item.message}</TableCell>
+                  <TableCell>
+                    <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+                      <Chip
+                        label={item.read ? 'Read' : 'Unread'}
+                        color={item.read ? 'default' : 'warning'}
+                        size="small"
+                      />
+                      <Button
+                        size="small"
+                        onClick={() => markContactRead(item)}
+                      >
+                        Mark {item.read ? 'unread' : 'read'}
+                      </Button>
+                    </Stack>
+                  </TableCell>
                 </TableRow>
               ))}
               {contact.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={6} align="center">
                     No contact submissions.
                   </TableCell>
                 </TableRow>
