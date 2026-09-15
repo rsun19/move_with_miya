@@ -6,10 +6,30 @@ import ContactForm from './ContactForm';
 
 afterEach(() => vi.restoreAllMocks());
 
+function challengeResponse() {
+  return new Response(JSON.stringify({ token: 'challenge-token' }), {
+    status: 200,
+  });
+}
+
+function addTurnstileToken() {
+  const form = screen
+    .getByRole('button', { name: 'Send message' })
+    .closest('form');
+  if (!form) throw new Error('Contact form not found');
+
+  const token = document.createElement('input');
+  token.name = 'turnstileToken';
+  token.value = 'turnstile-token';
+  form.append(token);
+}
+
 describe('ContactForm', () => {
   it('requires every field before submitting', async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.spyOn(global, 'fetch');
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(challengeResponse());
     render(<ContactForm />);
 
     await user.click(screen.getByRole('button', { name: 'Send message' }));
@@ -17,11 +37,15 @@ describe('ContactForm', () => {
     expect(
       screen.getByText('Please complete every field.'),
     ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/contact',
+      expect.anything(),
+    );
   });
 
   it('validates email format', async () => {
     const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(challengeResponse());
     render(<ContactForm />);
 
     await user.type(screen.getByLabelText(/^Name/), 'Person');
@@ -39,15 +63,18 @@ describe('ContactForm', () => {
     const user = userEvent.setup();
     const fetchMock = vi
       .spyOn(global, 'fetch')
-      .mockResolvedValue(
+      .mockResolvedValueOnce(challengeResponse())
+      .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: 1 }), { status: 201 }),
-      );
+      )
+      .mockResolvedValueOnce(challengeResponse());
     render(<ContactForm />);
 
     await user.type(screen.getByLabelText(/^Name/), ' Person ');
     await user.type(screen.getByLabelText(/^Email/), 'person@example.com');
     await user.type(screen.getByLabelText(/^Subject/), ' Question ');
     await user.type(screen.getByLabelText(/^Message/), ' Hello ');
+    addTurnstileToken();
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(
@@ -62,6 +89,8 @@ describe('ContactForm', () => {
           email: 'person@example.com',
           subject: 'Question',
           message: 'Hello',
+          turnstileToken: 'turnstile-token',
+          contactChallenge: 'challenge-token',
         }),
       }),
     );
@@ -70,17 +99,21 @@ describe('ContactForm', () => {
 
   it('shows API failures to the user', async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ message: 'Service unavailable' }), {
-        status: 503,
-      }),
-    );
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(challengeResponse())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: 'Service unavailable' }), {
+          status: 503,
+        }),
+      )
+      .mockResolvedValueOnce(challengeResponse());
     render(<ContactForm />);
 
     await user.type(screen.getByLabelText(/^Name/), 'Person');
     await user.type(screen.getByLabelText(/^Email/), 'person@example.com');
     await user.type(screen.getByLabelText(/^Subject/), 'Question');
     await user.type(screen.getByLabelText(/^Message/), 'Hello');
+    addTurnstileToken();
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Service unavailable')).toBeInTheDocument();
