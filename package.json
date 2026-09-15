@@ -12,7 +12,7 @@
     "lint": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run lint 2>&1); done",
     "format": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run format 2>&1); done",
     "typecheck": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run typecheck 2>&1); done",
-    "test": "set -e; for d in backend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run test -- --passWithNoTests 2>&1); done",
+    "test": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm run test -- --passWithNoTests 2>&1); done",
     "audit:fix": "set -e; for d in backend frontend user-service classes-service registration-service; do (cd \"$d\" && echo \"=== $d ===\" && npm audit fix 2>&1); done"
   },
   "devDependencies": {
