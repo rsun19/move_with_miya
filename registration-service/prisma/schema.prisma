@@ -15,14 +15,47 @@ enum RegistrationStatus {
 }
 
 model Registration {
-  id           Int                  @id @default(autoincrement())
-  classId      Int
-  userId       String
-  status       RegistrationStatus   @default(Registered)
-  registeredAt DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id                  Int                  @id @default(autoincrement())
+  classId             Int
+  userId              String
+  status              RegistrationStatus   @default(Registered)
+  registeredAt        DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  canceledAt          DateTime?
+  waitlistedAt        DateTime?
+  promotedAt          DateTime?
+  cancellationReason  String?
+  source              String               @default("member")
 
   @@unique([classId, userId])
+  @@index([classId, status, registeredAt])
+  @@index([classId, status, waitlistedAt])
+  @@index([userId, status])
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  eventKey    String    @unique
+  eventType   String
+  aggregateId String
+  payload     Json
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([processedAt, availableAt])
+}
+
+model NotificationDelivery {
+  id         String    @id @default(uuid())
+  eventKey   String    @unique
+  status     String    @default("Pending")
+  attempts   Int       @default(0)
+  lastError  String?
+  sentAt     DateTime?
+  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
 }
 
 model ContactSubmission {

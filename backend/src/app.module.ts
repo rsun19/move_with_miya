@@ -15,6 +15,8 @@ import { ContactRateLimitService } from './externalControllers/contact-rate-limi
 import { TurnstileService } from './externalControllers/turnstile.service';
 import { ContactRateLimitGuard } from './common/guards/contact-rate-limit.guard';
 import { RedisService } from './redis.service';
+import { RegistrationEventsController } from './externalControllers/registration-events.controller';
+import { RegistrationNotificationService } from './externalControllers/registration-notification.service';
 
 @Module({
   imports: [
@@ -49,6 +51,7 @@ import { RedisService } from './redis.service';
     LocationController,
     RegistrationController,
     ContactController,
+    RegistrationEventsController,
   ],
   providers: [
     AppService,
@@ -60,6 +63,7 @@ import { RedisService } from './redis.service';
     ContactRateLimitService,
     ContactRateLimitGuard,
     RedisService,
+    RegistrationNotificationService,
   ],
 })
 export class AppModule {}

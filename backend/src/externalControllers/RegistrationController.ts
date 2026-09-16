@@ -70,12 +70,30 @@ export class RegistrationController {
       if (status === 409) throw new ConflictException(message);
       if (status === 404) throw new NotFoundException(message);
       if (status === 400) throw new BadRequestException(message);
+      if (status === 403) throw new ForbiddenException(message);
       throw new InternalServerErrorException(message);
     }
   }
 
   private async rpcClasses<T = unknown>(cmd: string, payload: object) {
     return lastValueFrom<T>(this.classesClient.send<T>({ cmd }, payload));
+  }
+
+  private async getClass(classId: number) {
+    try {
+      return await lastValueFrom<{
+        id: number;
+        capacity?: number;
+        startDate?: string;
+        endDate?: string;
+        status?: string;
+        isPrivate?: boolean;
+        waitlistEnabled?: boolean;
+        cancellationCutoffHours?: number;
+      } | null>(this.classesClient.send({ cmd: 'get_class' }, { id: classId }));
+    } catch {
+      throw new ServiceUnavailableException('Class service unavailable');
+    }
   }
 
   private async enrichRegistrations(
@@ -165,6 +183,7 @@ export class RegistrationController {
       classId,
       userId,
       capacity: cls.capacity,
+      waitlistEnabled: cls.waitlistEnabled,
     });
   }
 
@@ -173,20 +192,11 @@ export class RegistrationController {
     userId: string,
   ): Promise<{
     capacity: number;
+    waitlistEnabled: boolean;
+    classStartAt?: string;
+    cancellationCutoffHours: number;
   }> {
-    let cls: {
-      capacity?: number;
-      endDate?: string;
-      status?: string;
-      isPrivate?: boolean;
-    } | null = null;
-    try {
-      cls = await lastValueFrom(
-        this.classesClient.send({ cmd: 'get_class' }, { id: classId }),
-      );
-    } catch {
-      throw new ServiceUnavailableException('Class service unavailable');
-    }
+    const cls = await this.getClass(classId);
     if (!cls) {
       throw new NotFoundException(`Class ${classId} not found`);
     }
@@ -234,7 +244,12 @@ export class RegistrationController {
       );
     }
 
-    return { capacity };
+    return {
+      capacity,
+      waitlistEnabled: cls.waitlistEnabled ?? true,
+      classStartAt: cls.startDate,
+      cancellationCutoffHours: cls.cancellationCutoffHours ?? 24,
+    };
   }
 
   @Get('class/:classId/me')
@@ -261,9 +276,40 @@ export class RegistrationController {
     if (!userId) {
       throw new UnauthorizedException('Not authenticated');
     }
-    return this.rpc<Registration>('delete_registration_by_class_and_user', {
+    const cls = await this.getClass(classId);
+    if (!cls || cls.capacity === undefined || !cls.startDate) {
+      throw new NotFoundException(`Class ${classId} not found`);
+    }
+    return this.rpc<Registration>('cancel_registration_by_class_and_user', {
       classId,
       userId,
+      capacity: cls.capacity,
+      classStartAt: cls.startDate,
+      cancellationCutoffHours: cls.cancellationCutoffHours ?? 24,
+      source: 'member',
+    });
+  }
+
+  @UseGuards(AdminGuard)
+  @Post(':id/cancel')
+  async cancelRegistration(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reason?: string },
+  ) {
+    const registration = await this.rpc<Registration>('get_registration', {
+      id,
+    });
+    const cls = await this.getClass(registration.classId);
+    if (!cls || cls.capacity === undefined) {
+      throw new NotFoundException(`Class ${registration.classId} not found`);
+    }
+    return this.rpc<Registration>('cancel_registration', {
+      id,
+      capacity: cls.capacity,
+      classStartAt: cls.startDate,
+      cancellationCutoffHours: cls.cancellationCutoffHours ?? 24,
+      source: 'admin',
+      reason: body.reason?.trim() || 'Admin cancellation',
     });
   }
 
@@ -278,13 +324,20 @@ export class RegistrationController {
 
   @UseGuards(AdminGuard)
   @Delete(':id')
-  deleteRegistration(@Param('id', ParseIntPipe) id: number) {
-    return this.rpc<Registration>('delete_registration', { id });
+  cancelRegistrationLegacy(@Param('id', ParseIntPipe) id: number) {
+    return this.cancelRegistration(id, {});
   }
 
   @UseGuards(AdminGuard)
-  @Delete('class/:classId')
-  deleteClassRegistrations(@Param('classId', ParseIntPipe) classId: number) {
-    return this.rpc<Registration>('delete_registrations', { classId });
+  @Post('class/:classId/cancel')
+  cancelClassRegistrations(
+    @Param('classId', ParseIntPipe) classId: number,
+    @Body() body: { reason?: string },
+  ) {
+    return this.rpc('cancel_class_registrations', {
+      classId,
+      reason: body.reason?.trim() || 'Class canceled',
+      source: 'class-cancellation',
+    });
   }
 }

@@ -36,9 +36,14 @@ async function fetchClasses(): Promise<{
 async function fetchSessionData(cookieString: string): Promise<{
   currentUserId: string | null;
   registeredClassIds: number[];
+  registrationStates: Record<number, string>;
 }> {
   if (!cookieString) {
-    return { currentUserId: null, registeredClassIds: [] };
+    return {
+      currentUserId: null,
+      registeredClassIds: [],
+      registrationStates: {},
+    };
   }
 
   try {
@@ -47,7 +52,11 @@ async function fetchSessionData(cookieString: string): Promise<{
       headers: { cookie: cookieString },
     });
     if (!meRes.ok) {
-      return { currentUserId: null, registeredClassIds: [] };
+      return {
+        currentUserId: null,
+        registeredClassIds: [],
+        registrationStates: {},
+      };
     }
     const user = (await meRes.json()) as AuthUser;
 
@@ -59,13 +68,26 @@ async function fetchSessionData(cookieString: string): Promise<{
       ? ((await regRes.json()) as Registration[])
       : [];
 
+    const registrationStates = Object.fromEntries(
+      registrations.map((registration) => [
+        registration.classId,
+        registration.status,
+      ]),
+    );
     return {
       currentUserId: user.id,
-      registeredClassIds: registrations.map((r) => r.classId),
+      registeredClassIds: registrations
+        .filter((r) => r.status === 'Registered')
+        .map((r) => r.classId),
+      registrationStates,
     };
   } catch (error) {
     console.error('Failed to load session data:', error);
-    return { currentUserId: null, registeredClassIds: [] };
+    return {
+      currentUserId: null,
+      registeredClassIds: [],
+      registrationStates: {},
+    };
   }
 }
 
@@ -91,6 +113,7 @@ export default async function ClassesPage() {
         classes={classes}
         currentUserId={session.currentUserId}
         registeredClassIds={session.registeredClassIds}
+        registrationStates={session.registrationStates}
       />
     </Box>
   );

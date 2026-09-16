@@ -15,7 +15,11 @@ describe('RegistrationController', () => {
         'findAllRegistrations',
         'getRegistrationCounts',
         'findRegistrationByClassAndUser',
-        'deleteRegistrationByClassAndUser',
+        'cancelRegistrationByClassAndUser',
+        'cancelRegistration',
+        'cancelClassRegistrations',
+        'promoteWaitlisted',
+        'getClassLifecycleSummary',
         'updateRegistration',
         'deleteRegistration',
         'deleteClassRegistrations',
@@ -39,9 +43,13 @@ describe('RegistrationController', () => {
       controller.findRegistrationByClassAndUser(
         input as { classId: number; userId: string },
       ),
-    deleteRegistrationByClassAndUser: (input) =>
-      controller.deleteRegistrationByClassAndUser(
-        input as { classId: number; userId: string },
+    cancelRegistrationByClassAndUser: (input) =>
+      controller.cancelRegistrationByClassAndUser(
+        input as {
+          classId: number;
+          userId: string;
+          capacity: number;
+        },
       ),
     deleteRegistration: (input) =>
       controller.deleteRegistration(input as { id: number }),
@@ -75,10 +83,10 @@ describe('RegistrationController', () => {
       [1, 'user-1'],
     ],
     [
-      'deleteRegistrationByClassAndUser',
-      { classId: 1, userId: 'user-1' },
-      'deleteRegistrationByClassAndUser',
-      [1, 'user-1'],
+      'cancelRegistrationByClassAndUser',
+      { classId: 1, userId: 'user-1', capacity: 10 },
+      'cancelRegistrationByClassAndUser',
+      [1, 'user-1', { classId: 1, userId: 'user-1', capacity: 10 }],
     ],
     ['deleteRegistration', { id: 2 }, 'deleteRegistration', [2]],
     [
@@ -122,7 +130,10 @@ describe('RegistrationController', () => {
         ignored: true,
       }),
     ).resolves.toBe('created');
-    expect(service.createRegistration).toHaveBeenCalledWith(1, 'user-1', 12);
+    expect(service.createRegistration).toHaveBeenCalledWith(1, 'user-1', 12, {
+      waitlistEnabled: undefined,
+      source: undefined,
+    });
   });
 
   it('splits ids from update payloads before forwarding', async () => {

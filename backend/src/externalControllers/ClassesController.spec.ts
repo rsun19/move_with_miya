@@ -9,6 +9,7 @@ describe('ClassesController', () => {
   beforeEach(() => {
     classesClient = { send: jest.fn() };
     registrationClient = { send: jest.fn() };
+    registrationClient.send.mockReturnValue(of({ total: 0, active: 0 }));
     controller = new ClassesController(
       classesClient as never,
       registrationClient as never,
@@ -112,15 +113,32 @@ describe('ClassesController', () => {
       'ok',
     );
     await expect(controller.deleteClass(2)).resolves.toBe('ok');
-    expect(classesClient.send).toHaveBeenNthCalledWith(
-      2,
+    expect(classesClient.send).toHaveBeenCalledWith(
       { cmd: 'update_class' },
       { name: 'New name', id: 2 },
     );
-    expect(classesClient.send).toHaveBeenNthCalledWith(
-      3,
+    expect(classesClient.send).toHaveBeenCalledWith(
       { cmd: 'delete_class' },
       { id: 2 },
+    );
+  });
+
+  it('cancels a class before resolving its active registrations', async () => {
+    const cls = { id: 2, status: 'Scheduled' };
+    classesClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(cmd === 'get_class' ? cls : { ...cls, status: 'Canceled' }),
+    );
+
+    await expect(
+      controller.cancelClass(2, { reason: 'Instructor unavailable' }),
+    ).resolves.toMatchObject({ status: 'Canceled' });
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'cancel_class_registrations' },
+      {
+        classId: 2,
+        reason: 'Instructor unavailable',
+        source: 'class-cancellation',
+      },
     );
   });
 });

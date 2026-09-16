@@ -23,8 +23,9 @@ interface ClassModalProps {
   cls: YogaClass;
   currentUserId?: string | null;
   isRegistered: boolean;
+  registrationStatus?: string;
   onClose: () => void;
-  onRegisteredChange: (classId: number, isRegistered: boolean) => void;
+  onRegisteredChange: (classId: number, status: string) => void;
 }
 
 function formatCost(cost: string): string {
@@ -37,6 +38,7 @@ export default function ClassModal({
   cls,
   currentUserId = null,
   isRegistered,
+  registrationStatus,
   onClose,
   onRegisteredChange,
 }: ClassModalProps) {
@@ -44,6 +46,8 @@ export default function ClassModal({
   const [message, setMessage] = useState('');
 
   const registered = isRegistered;
+  const currentStatus =
+    registrationStatus ?? (registered ? 'Registered' : null);
   const teachers = cls.teachers ?? [];
   // eslint-disable-next-line react-hooks/purity -- time comparison must reflect "now"
   const hasEnded = new Date(cls.endDate).getTime() < Date.now();
@@ -57,10 +61,13 @@ export default function ClassModal({
     if (!currentUserId) return;
     setStatus('loading');
     try {
-      await api(`/api/registration/class/${cls.id}/user/${currentUserId}`, {
-        method: 'POST',
-      });
-      onRegisteredChange(cls.id, true);
+      const registration = await api<{ status: string }>(
+        `/api/registration/class/${cls.id}/user/${currentUserId}`,
+        {
+          method: 'POST',
+        },
+      );
+      onRegisteredChange(cls.id, registration.status ?? 'Registered');
       setStatus('idle');
     } catch (error) {
       setStatus('error');
@@ -69,7 +76,7 @@ export default function ClassModal({
         err.status === 409 &&
         err.message === 'Already registered for this class'
       ) {
-        onRegisteredChange(cls.id, true);
+        onRegisteredChange(cls.id, 'Registered');
         setStatus('idle');
       } else {
         setMessage(err.message || 'Registration failed.');
@@ -82,7 +89,7 @@ export default function ClassModal({
     setStatus('loading');
     try {
       await api(`/api/registration/class/${cls.id}/me`, { method: 'DELETE' });
-      onRegisteredChange(cls.id, false);
+      onRegisteredChange(cls.id, 'Canceled');
       setStatus('idle');
     } catch (error) {
       setStatus('error');
@@ -99,8 +106,11 @@ export default function ClassModal({
             {cls.name}
           </Typography>
           {hasEnded && <Chip label="Ended" color="default" size="small" />}
-          {registered && (
+          {currentStatus === 'Registered' && (
             <Chip label="Registered" color="success" size="small" />
+          )}
+          {currentStatus === 'Waitlisted' && (
+            <Chip label="Waitlisted" color="warning" size="small" />
           )}
           {cls.isPrivate ? (
             <Chip label="Private" color="secondary" size="small" />
@@ -175,7 +185,7 @@ export default function ClassModal({
             {hasEnded ? 'Class ended' : 'Registration closed'}
           </Button>
         ) : currentUserId ? (
-          registered ? (
+          currentStatus === 'Registered' || currentStatus === 'Waitlisted' ? (
             <Button
               variant="outlined"
               color="error"
@@ -184,6 +194,8 @@ export default function ClassModal({
             >
               {status === 'loading' ? (
                 <CircularProgress size={20} color="inherit" />
+              ) : currentStatus === 'Waitlisted' ? (
+                'Leave Waitlist'
               ) : (
                 'Cancel Registration'
               )}

@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -9,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  NotFoundException,
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -37,6 +39,8 @@ interface ClassRecord {
   locationId: number;
   location: Record<string, unknown>;
   isPrivate: boolean;
+  waitlistEnabled: boolean;
+  cancellationCutoffHours: number;
 }
 
 @Controller('classes')
@@ -126,17 +130,93 @@ export class ClassesController {
   }
 
   @UseGuards(AdminGuard)
+  @Post(':id/cancel')
+  async cancelClass(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reason?: string },
+  ) {
+    const cls = await this.rpcClasses<ClassRecord | null>('get_class', { id });
+    if (!cls) throw new NotFoundException(`Class ${id} not found`);
+
+    const updated = await this.rpcClasses<ClassRecord>('update_class', {
+      id,
+      status: 'Canceled',
+    });
+    try {
+      await this.rpcRegistrations('cancel_class_registrations', {
+        classId: id,
+        reason: body.reason?.trim() || 'Class canceled',
+        source: 'class-cancellation',
+      });
+    } catch (error) {
+      // The databases are separate. Compensate when the dependent lifecycle
+      // operation cannot be completed so the class is not left half-canceled.
+      try {
+        await this.rpcClasses('update_class', { id, status: cls.status });
+      } catch {
+        // The original error remains the useful response; reconciliation can
+        // retry the class-wide cancellation if compensation also fails.
+      }
+      throw error;
+    }
+    return updated;
+  }
+
+  @UseGuards(AdminGuard)
   @Patch(':id')
-  updateClass(
+  async updateClass(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: Record<string, unknown>,
   ) {
-    return this.rpcClasses('update_class', { ...body, id });
+    const current = await this.rpcClasses<ClassRecord | null>('get_class', {
+      id,
+    });
+    if (!current) throw new NotFoundException(`Class ${id} not found`);
+    if (body.status === 'Canceled' && current.status !== 'Canceled') {
+      return this.cancelClass(id, {});
+    }
+
+    if ('capacity' in body) {
+      const nextCapacity = Number(body.capacity);
+      const summary = await this.rpcRegistrations<{
+        active: number;
+      }>('get_class_lifecycle_summary', { classId: id });
+      if (Number.isInteger(nextCapacity) && nextCapacity < summary.active) {
+        throw new ConflictException(
+          'Capacity cannot be lower than the number of active registrations',
+        );
+      }
+    }
+
+    const updated = await this.rpcClasses<ClassRecord>('update_class', {
+      ...body,
+      id,
+    });
+    const nextCapacity = Number(body.capacity ?? updated.capacity);
+    if (
+      nextCapacity > current.capacity ||
+      (current.status === 'Canceled' && updated.status !== 'Canceled')
+    ) {
+      await this.rpcRegistrations('promote_waitlisted', {
+        classId: id,
+        capacity: nextCapacity,
+      });
+    }
+    return updated;
   }
 
   @UseGuards(AdminGuard)
   @Delete(':id')
-  deleteClass(@Param('id', ParseIntPipe) id: number) {
+  async deleteClass(@Param('id', ParseIntPipe) id: number) {
+    const summary = await this.rpcRegistrations<{
+      total: number;
+      active: number;
+    }>('get_class_lifecycle_summary', { classId: id });
+    if (summary.total > 0) {
+      throw new ConflictException(
+        'Classes with registration history must be canceled, not deleted',
+      );
+    }
     return this.rpcClasses('delete_class', { id });
   }
 }
