@@ -151,6 +151,6 @@ describe('AdminDashboard', () => {
     await waitFor(() =>
       expect(screen.getByText('Registration cancelled.')).toBeInTheDocument(),
     );
-    expect(screen.getByText('No registrations yet.')).toBeInTheDocument();
+    expect(screen.getByText('Canceled')).toBeInTheDocument();
   });
 });

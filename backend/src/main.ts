@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import session from 'express-session';
 import { AppModule } from './app.module';
 import { RedisService } from './redis.service';
@@ -17,6 +18,17 @@ const { RedisStore } = require('connect-redis') as {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [
+        configService.get<string>('RABBITMQ_URL', 'amqp://localhost:5672'),
+      ],
+      queue: 'registration_events',
+      queueOptions: { durable: true },
+    },
+  });
 
   app.set(
     'trust proxy',
@@ -47,6 +59,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const port = configService.get<number>('PORT', 3002);
+  await app.startAllMicroservices();
   await app.listen(port);
   console.log(`backend listening on http://localhost:${port}`);
 }

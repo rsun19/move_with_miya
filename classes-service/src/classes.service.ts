@@ -56,6 +56,14 @@ export class ClassesService {
     return number;
   }
 
+  private parseNonNegativeInteger(value: unknown, field: string): number {
+    const number = typeof value === 'number' ? value : Number(value);
+    if (!Number.isInteger(number) || number < 0) {
+      throw new BadRequestException(`${field} must be a non-negative integer`);
+    }
+    return number;
+  }
+
   createClass(data: {
     name: string;
     teacherIds: string[];
@@ -69,6 +77,8 @@ export class ClassesService {
     locationId: number;
     status?: string;
     isPrivate?: boolean;
+    waitlistEnabled?: boolean;
+    cancellationCutoffHours?: number;
   }) {
     const startDate = this.parseDate(data.startDate, 'startDate');
     const endDate = this.parseDate(data.endDate, 'endDate');
@@ -78,6 +88,12 @@ export class ClassesService {
     const status = data.status ?? ClassStatus.Scheduled;
     if (!Object.values(ClassStatus).includes(status as ClassStatus)) {
       throw new BadRequestException('status is invalid');
+    }
+    if (
+      data.waitlistEnabled !== undefined &&
+      typeof data.waitlistEnabled !== 'boolean'
+    ) {
+      throw new BadRequestException('waitlistEnabled must be a boolean');
     }
 
     return this.prisma.client.yogaClass.create({
@@ -94,6 +110,11 @@ export class ClassesService {
         locationId: data.locationId,
         status: status as ClassStatus,
         isPrivate: data.isPrivate ?? false,
+        waitlistEnabled: data.waitlistEnabled ?? true,
+        cancellationCutoffHours: this.parseNonNegativeInteger(
+          data.cancellationCutoffHours ?? 24,
+          'cancellationCutoffHours',
+        ),
       },
       include: { location: true },
     });
@@ -122,11 +143,23 @@ export class ClassesService {
         'duration',
       );
     }
+    if ('cancellationCutoffHours' in updateData) {
+      updateData.cancellationCutoffHours = this.parseNonNegativeInteger(
+        updateData.cancellationCutoffHours,
+        'cancellationCutoffHours',
+      );
+    }
     if (
       'status' in updateData &&
       !Object.values(ClassStatus).includes(updateData.status as ClassStatus)
     ) {
       throw new BadRequestException('status is invalid');
+    }
+    if (
+      'waitlistEnabled' in updateData &&
+      typeof updateData.waitlistEnabled !== 'boolean'
+    ) {
+      throw new BadRequestException('waitlistEnabled must be a boolean');
     }
     const hasScheduleUpdate =
       'startDate' in updateData || 'endDate' in updateData;

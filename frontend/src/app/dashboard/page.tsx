@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import DashboardClient from '@/components/DashboardClient';
-import type { AuthUser } from '@/lib/types';
-import { USER_SERVICE_URL } from '@/lib/env';
+import type { AuthUser, Registration } from '@/lib/types';
+import { BACKEND_URL, USER_SERVICE_URL } from '@/lib/env';
 
 export const metadata: Metadata = {
   title: 'Dashboard | Move with Miya',
@@ -31,5 +31,21 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  return <DashboardClient user={user} />;
+  let registrations: Registration[] = [];
+  try {
+    const registrationsResponse = await fetch(
+      `${BACKEND_URL}/registration/me`,
+      {
+        cache: 'no-store',
+        headers: { cookie: cookieString },
+      },
+    );
+    if (registrationsResponse.ok) {
+      registrations = (await registrationsResponse.json()) as Registration[];
+    }
+  } catch (error) {
+    console.error('Failed to load registrations:', error);
+  }
+
+  return <DashboardClient user={user} registrations={registrations} />;
 }

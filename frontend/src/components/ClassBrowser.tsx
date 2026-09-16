@@ -19,12 +19,14 @@ interface ClassBrowserProps {
   classes: YogaClass[];
   currentUserId?: string | null;
   registeredClassIds?: number[];
+  registrationStates?: Record<number, string>;
 }
 
 export default function ClassBrowser({
   classes,
   currentUserId = null,
   registeredClassIds = [],
+  registrationStates = {},
 }: ClassBrowserProps) {
   const [view, setView] = useState<ViewMode>('list');
   const [now] = useState(() => new Date().getTime());
@@ -32,8 +34,18 @@ export default function ClassBrowser({
     getDefaultFilters(),
   );
   const [selectedClass, setSelectedClass] = useState<YogaClass | null>(null);
-  const [registered, setRegistered] = useState<Set<number>>(
-    () => new Set(registeredClassIds),
+  const [registrationStatus, setRegistrationStatus] = useState<
+    Map<number, string>
+  >(
+    () =>
+      new Map([
+        ...Object.entries(registrationStates).map(
+          ([id, status]) => [Number(id), status] as [number, string],
+        ),
+        ...registeredClassIds.map(
+          (id) => [id, 'Registered'] as [number, string],
+        ),
+      ]),
   );
 
   const locations = useMemo(() => {
@@ -66,14 +78,11 @@ export default function ClassBrowser({
     });
   }, [classes, filters, now]);
 
-  const handleRegisteredChange = (classId: number, isRegistered: boolean) => {
-    setRegistered((prev) => {
-      const next = new Set(prev);
-      if (isRegistered) {
-        next.add(classId);
-      } else {
-        next.delete(classId);
-      }
+  const handleRegisteredChange = (classId: number, status: string) => {
+    setRegistrationStatus((prev) => {
+      const next = new Map(prev);
+      if (status === 'Canceled') next.delete(classId);
+      else next.set(classId, status);
       return next;
     });
   };
@@ -81,7 +90,11 @@ export default function ClassBrowser({
   const sharedViewProps = {
     classes: filtered,
     onOpen: setSelectedClass,
-    registeredClassIds: registered,
+    registeredClassIds: new Set(
+      [...registrationStatus.entries()]
+        .filter(([, status]) => status === 'Registered')
+        .map(([id]) => id),
+    ),
   };
 
   return (
@@ -126,7 +139,10 @@ export default function ClassBrowser({
         <ClassModal
           cls={selectedClass}
           currentUserId={currentUserId}
-          isRegistered={registered.has(selectedClass.id)}
+          isRegistered={
+            registrationStatus.get(selectedClass.id) === 'Registered'
+          }
+          registrationStatus={registrationStatus.get(selectedClass.id)}
           onClose={() => setSelectedClass(null)}
           onRegisteredChange={handleRegisteredChange}
         />

@@ -125,7 +125,12 @@ describe('RegistrationController', () => {
       ).resolves.toEqual({ id: 1 });
       expect(client.send).toHaveBeenCalledWith(
         { cmd: 'create_registration' },
-        { classId: 1, userId: sessionUserId, capacity: 10 },
+        {
+          classId: 1,
+          userId: sessionUserId,
+          capacity: 10,
+          waitlistEnabled: true,
+        },
       );
     });
 
