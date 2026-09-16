@@ -29,4 +29,6 @@ export interface YogaClass {
   locationId: number;
   location: Location;
   isPrivate: boolean;
+  waitlistEnabled: boolean;
+  cancellationCutoffHours: number;
 }

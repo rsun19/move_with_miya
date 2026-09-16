@@ -25,7 +25,7 @@ import TextField from '@mui/material/TextField';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { api } from '@/lib/api';
-import type { YogaClass } from '@/lib/types';
+import type { Registration, YogaClass } from '@/lib/types';
 
 interface Registrant {
   id: number;
@@ -60,7 +60,7 @@ export default function ClassDetailClient({
   registrants = null,
 }: ClassDetailClientProps) {
   const [status, setStatus] = useState<
-    'checking' | 'idle' | 'loading' | 'registered' | 'error'
+    'checking' | 'idle' | 'loading' | 'registered' | 'waitlisted' | 'error'
   >('checking');
   const [message, setMessage] = useState('');
   const [experienceDialogOpen, setExperienceDialogOpen] = useState(false);
@@ -84,9 +84,15 @@ export default function ClassDetailClient({
   useEffect(() => {
     if (!user) return;
     let ignore = false;
-    api(`/api/registration/class/${cls.id}/me`)
-      .then(() => {
-        if (!ignore) setStatus('registered');
+    api<Registration>(`/api/registration/class/${cls.id}/me`)
+      .then((registration) => {
+        if (!ignore) {
+          if (registration.status === 'Waitlisted') setStatus('waitlisted');
+          else if (registration.status === 'Canceled') {
+            setStatus('idle');
+            setMessage('Your previous registration was canceled.');
+          } else setStatus('registered');
+        }
       })
       .catch(() => {
         if (!ignore) setStatus('idle');
@@ -100,10 +106,15 @@ export default function ClassDetailClient({
     if (!user) return;
     setStatus('loading');
     try {
-      await api(`/api/registration/class/${cls.id}/user/${user.id}`, {
-        method: 'POST',
-      });
-      setStatus('registered');
+      const registration = await api<Registration>(
+        `/api/registration/class/${cls.id}/user/${user.id}`,
+        {
+          method: 'POST',
+        },
+      );
+      setStatus(
+        registration.status === 'Waitlisted' ? 'waitlisted' : 'registered',
+      );
       setMessage('');
     } catch (error) {
       setStatus('error');
@@ -113,6 +124,9 @@ export default function ClassDetailClient({
         err.message === 'Already registered for this class'
       ) {
         setStatus('registered');
+        setMessage('');
+      } else if (err.status === 409 && err.message?.includes('waitlisted')) {
+        setStatus('waitlisted');
         setMessage('');
       } else {
         setMessage(err.message || 'Registration failed.');
@@ -162,7 +176,7 @@ export default function ClassDetailClient({
     try {
       await api(`/api/registration/class/${cls.id}/me`, { method: 'DELETE' });
       setStatus('idle');
-      setMessage('');
+      setMessage('Registration canceled.');
     } catch (error) {
       setStatus('error');
       const err = error as { message?: string };
@@ -241,6 +255,14 @@ export default function ClassDetailClient({
         {status === 'registered' && (
           <Alert severity="success">You are registered for this class!</Alert>
         )}
+        {status === 'waitlisted' && (
+          <Alert severity="warning">
+            You are on the waitlist. We&apos;ll notify you if a seat opens.
+          </Alert>
+        )}
+        {status === 'idle' && message && (
+          <Alert severity="info">{message}</Alert>
+        )}
         {status === 'error' && <Alert severity="error">{message}</Alert>}
         {user && cls.isPrivate && !hasYogaExperience && (
           <Alert severity="info">
@@ -258,14 +280,16 @@ export default function ClassDetailClient({
             <CircularProgress size={20} color="inherit" />
           </Button>
         ) : user ? (
-          status === 'registered' ? (
+          status === 'registered' || status === 'waitlisted' ? (
             <Button
               variant="outlined"
               color="error"
               size="large"
               onClick={handleCancel}
             >
-              Cancel Registration
+              {status === 'waitlisted'
+                ? 'Leave Waitlist'
+                : 'Cancel Registration'}
             </Button>
           ) : (
             <Button

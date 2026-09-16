@@ -27,6 +27,9 @@ describe('RegistrationService', () => {
       update: jest.Mock;
     };
     $transaction: jest.Mock;
+    outboxEvent: {
+      create: jest.Mock;
+    };
   };
 
   const existing = {
@@ -53,6 +56,9 @@ describe('RegistrationService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
+      },
+      outboxEvent: {
+        create: jest.fn().mockResolvedValue({}),
       },
       $transaction: jest.fn((callback: (tx: typeof prisma) => unknown) =>
         callback(prisma),
@@ -136,6 +142,7 @@ describe('RegistrationService', () => {
 
   it('creates a registration when none exists', async () => {
     prisma.registration.findFirst.mockResolvedValue(null);
+    prisma.registration.count.mockResolvedValue(0);
     prisma.registration.create.mockResolvedValue(existing);
 
     const result = await service.createRegistration(10, 'user-1', 10);
@@ -145,18 +152,40 @@ describe('RegistrationService', () => {
       where: { classId: 10, userId: 'user-1' },
     });
     expect(prisma.registration.create).toHaveBeenCalledWith({
-      data: { classId: 10, userId: 'user-1', status: 'Registered' },
+      data: {
+        classId: 10,
+        userId: 'user-1',
+        status: 'Registered',
+        waitlistedAt: null,
+        source: 'member',
+      },
     });
   });
 
-  it('rejects a registration when the class is full', async () => {
+  it('waitlists a registration when the class is full', async () => {
     prisma.registration.count.mockResolvedValue(10);
+    prisma.registration.create.mockResolvedValue({
+      ...existing,
+      userId: 'user-2',
+      status: 'Waitlisted',
+    });
 
     await expect(
       service.createRegistration(10, 'user-2', 10),
-    ).rejects.toMatchObject({
-      message: 'Class is full',
+    ).resolves.toMatchObject({
+      status: 'Waitlisted',
     });
+    expect(prisma.registration.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ status: 'Waitlisted' }) as never,
+    });
+  });
+
+  it('rejects a full class when waitlisting is disabled', async () => {
+    prisma.registration.count.mockResolvedValue(10);
+
+    await expect(
+      service.createRegistration(10, 'user-2', 10, { waitlistEnabled: false }),
+    ).rejects.toMatchObject({ message: 'Class is full' });
     expect(prisma.registration.create).not.toHaveBeenCalled();
   });
 
@@ -185,6 +214,11 @@ describe('RegistrationService', () => {
       data: {
         status: 'Registered',
         registeredAt: expect.any(Date) as never,
+        waitlistedAt: null,
+        promotedAt: null,
+        canceledAt: null,
+        cancellationReason: null,
+        source: 'member',
       },
     });
     expect(prisma.registration.create).not.toHaveBeenCalled();
@@ -252,43 +286,129 @@ describe('RegistrationService', () => {
     });
   });
 
-  it('deletes the registration for a class/user pair', async () => {
+  it('cancels the registration for a class/user pair', async () => {
     prisma.registration.findFirst.mockResolvedValue(existing);
-    prisma.registration.delete.mockResolvedValue(existing);
-
-    const result = await service.deleteRegistrationByClassAndUser(10, 'user-1');
-
-    expect(prisma.registration.delete).toHaveBeenCalledWith({
-      where: { id: existing.id },
+    prisma.registration.findUnique.mockResolvedValue(existing);
+    prisma.registration.update.mockResolvedValue({
+      ...existing,
+      status: 'Canceled',
     });
-    expect(result).toEqual(existing);
+    prisma.registration.findMany.mockResolvedValue([]);
+    prisma.registration.count.mockResolvedValue(1);
+
+    const result = await service.cancelRegistrationByClassAndUser(
+      10,
+      'user-1',
+      {
+        capacity: 10,
+        source: 'admin',
+        reason: 'No longer available',
+      },
+    );
+
+    expect(prisma.registration.update).toHaveBeenCalledWith({
+      where: { id: existing.id },
+      data: expect.objectContaining({
+        status: 'Canceled',
+        cancellationReason: 'No longer available',
+      }) as never,
+    });
+    expect(result).toMatchObject({ ...existing, status: 'Canceled' });
   });
 
-  it('throws 404 when deleting a non-existent registration', async () => {
+  it('throws 404 when canceling a non-existent registration', async () => {
     prisma.registration.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.deleteRegistrationByClassAndUser(10, 'user-1'),
+      service.cancelRegistrationByClassAndUser(10, 'user-1', { capacity: 10 }),
     ).rejects.toMatchObject({
       message: 'Not registered for this class',
     });
   });
 
-  it('updates and deletes registrations', async () => {
+  it('rejects member cancellation after the cutoff', async () => {
+    prisma.registration.findUnique.mockResolvedValue(existing);
+
+    await expect(
+      service.cancelRegistration(1, {
+        capacity: 10,
+        classStartAt: new Date(Date.now() + 60 * 60 * 1_000),
+        cancellationCutoffHours: 24,
+      }),
+    ).rejects.toMatchObject({
+      message: 'The cancellation window has closed',
+    });
+    expect(prisma.registration.update).not.toHaveBeenCalled();
+  });
+
+  it('returns an already-canceled registration without applying the cutoff', async () => {
+    const canceled = { ...existing, status: 'Canceled' };
+    prisma.registration.findUnique.mockResolvedValue(canceled);
+
+    await expect(
+      service.cancelRegistration(1, {
+        capacity: 10,
+        classStartAt: new Date(Date.now() + 60 * 60 * 1_000),
+        cancellationCutoffHours: 24,
+      }),
+    ).resolves.toEqual(canceled);
+    expect(prisma.registration.update).not.toHaveBeenCalled();
+  });
+
+  it('updates registrations and rejects destructive deletion', async () => {
     prisma.registration.update.mockResolvedValue({
       ...existing,
       status: 'Canceled',
     });
-    prisma.registration.delete.mockResolvedValue(existing);
-    prisma.registration.deleteMany.mockResolvedValue({ count: 1 });
 
-    await expect(
-      service.updateRegistration(1, { status: 'Canceled' }),
-    ).resolves.toMatchObject({ status: 'Canceled' });
-    await expect(service.deleteRegistration(1)).resolves.toEqual(existing);
-    await expect(service.deleteClassRegistrations(10)).resolves.toEqual({
-      count: 1,
+    expect(() => service.updateRegistration(1, { status: 'Canceled' })).toThrow(
+      'Use the cancellation lifecycle endpoint to change status',
+    );
+    await expect(service.deleteRegistration(1)).rejects.toMatchObject({
+      message: 'Registration 1 must be canceled, not deleted',
     });
+    await expect(service.deleteClassRegistrations(10)).rejects.toMatchObject({
+      message: 'Class 10 registrations must be canceled, not deleted',
+    });
+  });
+
+  it('promotes the earliest waitlisted member into an available seat', async () => {
+    prisma.registration.count.mockResolvedValue(0);
+    prisma.registration.findMany.mockResolvedValue([
+      { id: 2, classId: 10, userId: 'user-2', status: 'Waitlisted' },
+    ]);
+    prisma.registration.update.mockResolvedValue({
+      id: 2,
+      classId: 10,
+      userId: 'user-2',
+      status: 'Registered',
+    });
+
+    await expect(service.promoteWaitlisted(10, 1)).resolves.toHaveLength(1);
+    expect(prisma.registration.findMany).toHaveBeenCalledWith({
+      where: { classId: 10, status: 'Waitlisted' },
+      orderBy: [{ waitlistedAt: 'asc' }, { id: 'asc' }],
+      take: 1,
+    });
+  });
+
+  it('cancels all active registrations for a canceled class', async () => {
+    const active = [
+      { id: 1, classId: 10, userId: 'user-1', status: 'Registered' },
+      { id: 2, classId: 10, userId: 'user-2', status: 'Waitlisted' },
+    ];
+    prisma.registration.findMany.mockResolvedValue(active);
+    prisma.registration.update.mockResolvedValue({
+      id: 1,
+      classId: 10,
+      userId: 'user-1',
+      status: 'Canceled',
+    });
+
+    await expect(service.cancelClassRegistrations(10)).resolves.toEqual({
+      canceled: 2,
+    });
+    expect(prisma.registration.update).toHaveBeenCalledTimes(2);
   });
 
   it('creates and lists contact submissions', async () => {

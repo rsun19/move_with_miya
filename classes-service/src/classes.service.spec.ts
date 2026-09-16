@@ -93,6 +93,8 @@ describe('ClassesService date validation', () => {
             duration: 75,
             imageUrl: 'https://example.com/yoga.jpg',
             isPrivate: true,
+            waitlistEnabled: true,
+            cancellationCutoffHours: 24,
           }) as never,
         }) as never,
       );
@@ -116,6 +118,12 @@ describe('ClassesService date validation', () => {
           ...base,
           endDate: base.startDate,
         }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('rejects an invalid cancellation cutoff', () => {
+      expect(() =>
+        service.createClass({ ...base, cancellationCutoffHours: -1 }),
       ).toThrow(BadRequestException);
     });
   });

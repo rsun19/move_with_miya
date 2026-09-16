@@ -29,7 +29,7 @@ describe('ClassModal', () => {
     await user.click(screen.getByRole('button', { name: 'Register' }));
 
     await waitFor(() =>
-      expect(onRegisteredChange).toHaveBeenCalledWith(1, true),
+      expect(onRegisteredChange).toHaveBeenCalledWith(1, 'Registered'),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/registration/class/1/user/user-1',
@@ -58,7 +58,7 @@ describe('ClassModal', () => {
     );
 
     await waitFor(() =>
-      expect(onRegisteredChange).toHaveBeenCalledWith(1, false),
+      expect(onRegisteredChange).toHaveBeenCalledWith(1, 'Canceled'),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/registration/class/1/me',

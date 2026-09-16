@@ -40,6 +40,8 @@ model YogaClass {
   locationId  Int
   location    Location    @relation(fields: [locationId], references: [id])
   isPrivate   Boolean     @default(false) @map("private")
+  waitlistEnabled          Boolean     @default(true)
+  cancellationCutoffHours  Int         @default(24)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

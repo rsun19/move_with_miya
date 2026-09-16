@@ -18,15 +18,19 @@ export class RegistrationController {
 
   @MessagePattern({ cmd: 'create_registration' })
   createRegistration(
-    data: { classId: number; userId: string; capacity: number } & Record<
-      string,
-      unknown
-    >,
+    data: {
+      classId: number;
+      userId: string;
+      capacity: number;
+      waitlistEnabled?: boolean;
+      source?: string;
+    } & Record<string, unknown>,
   ) {
     return this.registrationService.createRegistration(
       data.classId,
       data.userId,
       data.capacity,
+      { waitlistEnabled: data.waitlistEnabled, source: data.source },
     );
   }
 
@@ -53,12 +57,93 @@ export class RegistrationController {
     );
   }
 
-  @MessagePattern({ cmd: 'delete_registration_by_class_and_user' })
-  deleteRegistrationByClassAndUser(data: { classId: number; userId: string }) {
-    return this.registrationService.deleteRegistrationByClassAndUser(
+  @MessagePattern({ cmd: 'cancel_registration_by_class_and_user' })
+  cancelRegistrationByClassAndUser(data: {
+    classId: number;
+    userId: string;
+    capacity: number;
+    classStartAt?: string;
+    cancellationCutoffHours?: number;
+    source?: string;
+    reason?: string;
+  }) {
+    return this.registrationService.cancelRegistrationByClassAndUser(
       data.classId,
       data.userId,
+      data,
     );
+  }
+
+  @MessagePattern({ cmd: 'delete_registration_by_class_and_user' })
+  deleteRegistrationByClassAndUser(data: {
+    classId: number;
+    userId: string;
+    capacity?: number;
+    classStartAt?: string;
+    cancellationCutoffHours?: number;
+  }) {
+    return this.registrationService.cancelRegistrationByClassAndUser(
+      data.classId,
+      data.userId,
+      {
+        capacity: data.capacity ?? 1,
+        classStartAt: data.classStartAt,
+        cancellationCutoffHours: data.cancellationCutoffHours,
+      },
+    );
+  }
+
+  @MessagePattern({ cmd: 'cancel_registration' })
+  cancelRegistration(data: {
+    id: number;
+    capacity: number;
+    classStartAt?: string;
+    cancellationCutoffHours?: number;
+    source?: string;
+    reason?: string;
+  }) {
+    return this.registrationService.cancelRegistration(data.id, data);
+  }
+
+  @MessagePattern({ cmd: 'cancel_class_registrations' })
+  cancelClassRegistrations(data: {
+    classId: number;
+    reason?: string;
+    source?: string;
+  }) {
+    return this.registrationService.cancelClassRegistrations(
+      data.classId,
+      data.reason,
+      data.source,
+    );
+  }
+
+  @MessagePattern({ cmd: 'promote_waitlisted' })
+  promoteWaitlisted(data: { classId: number; capacity: number }) {
+    return this.registrationService.promoteWaitlisted(
+      data.classId,
+      data.capacity,
+    );
+  }
+
+  @MessagePattern({ cmd: 'get_class_lifecycle_summary' })
+  getClassLifecycleSummary(data: { classId: number }) {
+    return this.registrationService.getClassLifecycleSummary(data.classId);
+  }
+
+  @MessagePattern({ cmd: 'claim_notification' })
+  claimNotification(data: { eventKey: string }) {
+    return this.registrationService.claimNotification(data.eventKey);
+  }
+
+  @MessagePattern({ cmd: 'complete_notification' })
+  completeNotification(data: { eventKey: string }) {
+    return this.registrationService.completeNotification(data.eventKey);
+  }
+
+  @MessagePattern({ cmd: 'fail_notification' })
+  failNotification(data: { eventKey: string; error: string }) {
+    return this.registrationService.failNotification(data.eventKey, data.error);
   }
 
   @MessagePattern({ cmd: 'update_registration' })

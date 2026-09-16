@@ -62,6 +62,8 @@ const emptyClassForm = {
   teacherIds: [] as string[],
   isPrivate: false,
   status: 'Scheduled',
+  waitlistEnabled: true,
+  cancellationCutoffHours: '24',
 };
 
 const emptyLocationForm = {
@@ -141,6 +143,8 @@ export default function AdminDashboard({
       teacherIds: cls.teacherIds ?? [],
       isPrivate: cls.isPrivate,
       status: cls.status,
+      waitlistEnabled: cls.waitlistEnabled ?? true,
+      cancellationCutoffHours: String(cls.cancellationCutoffHours ?? 24),
     });
     setClassDialog(true);
   };
@@ -196,12 +200,19 @@ export default function AdminDashboard({
         teacherIds: classForm.teacherIds,
         isPrivate: classForm.isPrivate,
         status: classForm.status,
+        waitlistEnabled: classForm.waitlistEnabled,
+        cancellationCutoffHours: Number(classForm.cancellationCutoffHours),
       };
       if (editingClass) {
-        await api(`/api/classes/${editingClass.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+        const canceling =
+          classForm.status === 'Canceled' && editingClass.status !== 'Canceled';
+        await api(
+          `/api/classes/${editingClass.id}${canceling ? '/cancel' : ''}`,
+          {
+            method: canceling ? 'POST' : 'PATCH',
+            body: JSON.stringify(payload),
+          },
+        );
       } else {
         await api('/api/classes', {
           method: 'POST',
@@ -226,6 +237,27 @@ export default function AdminDashboard({
       showNotice('Class deleted.');
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Delete failed.');
+    }
+  };
+
+  const cancelClass = async (id: number) => {
+    if (!confirm('Cancel this class and notify all registrants?')) return;
+    try {
+      await api(`/api/classes/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'Canceled by administrator' }),
+      });
+      const [updatedClasses, updatedRegistrations] = await Promise.all([
+        api<YogaClass[]>('/api/classes'),
+        api<Registration[]>('/api/registration'),
+      ]);
+      setClasses(updatedClasses);
+      setRegistrations(updatedRegistrations);
+      showNotice('Class canceled and registrations updated.');
+    } catch (err) {
+      showError(
+        err instanceof Error ? err.message : 'Class cancellation failed.',
+      );
     }
   };
 
@@ -285,8 +317,20 @@ export default function AdminDashboard({
   const cancelRegistration = async (id: number) => {
     if (!confirm('Cancel this registration?')) return;
     try {
-      await api(`/api/registration/${id}`, { method: 'DELETE' });
-      setRegistrations((previous) => previous.filter((reg) => reg.id !== id));
+      const updated = await api<Registration>(
+        `/api/registration/${id}/cancel`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason: 'Canceled by administrator' }),
+        },
+      );
+      setRegistrations((previous) =>
+        previous.map((reg) =>
+          reg.id === id
+            ? { ...reg, ...updated, status: updated.status ?? 'Canceled' }
+            : reg,
+        ),
+      );
       showNotice('Registration cancelled.');
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Cancel failed.');
@@ -432,6 +476,14 @@ export default function AdminDashboard({
                       <Stack direction="row" spacing={1}>
                         <Button size="small" onClick={() => openEditClass(cls)}>
                           Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={cls.status === 'Canceled'}
+                          onClick={() => cancelClass(cls.id)}
+                        >
+                          Cancel
                         </Button>
                         <Button
                           size="small"
@@ -800,6 +852,21 @@ export default function AdminDashboard({
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField
+                label="Cancellation cutoff (hours)"
+                type="number"
+                required
+                fullWidth
+                value={classForm.cancellationCutoffHours}
+                onChange={(e) =>
+                  setClassForm({
+                    ...classForm,
+                    cancellationCutoffHours: e.target.value,
+                  })
+                }
+              />
+            </Grid>
+            <Grid size={{ xs: 6 }}>
+              <TextField
                 label="Duration (min)"
                 type="number"
                 required
@@ -929,6 +996,22 @@ export default function AdminDashboard({
                 onChange={(e) =>
                   setClassForm({ ...classForm, description: e.target.value })
                 }
+              />
+            </Grid>
+            <Grid size={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={classForm.waitlistEnabled}
+                    onChange={(e) =>
+                      setClassForm({
+                        ...classForm,
+                        waitlistEnabled: e.target.checked,
+                      })
+                    }
+                  />
+                }
+                label="Allow waitlist"
               />
             </Grid>
             <Grid size={12}>

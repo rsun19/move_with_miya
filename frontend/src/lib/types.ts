@@ -31,6 +31,8 @@ export interface YogaClass {
   location: Location;
   isPrivate: boolean;
   registrationCount?: number;
+  waitlistEnabled?: boolean;
+  cancellationCutoffHours?: number;
   teachers?: Teacher[];
 }
 
@@ -55,6 +57,12 @@ export interface Registration {
   classId: number;
   status: string;
   registeredAt: string;
+  canceledAt?: string | null;
+  waitlistedAt?: string | null;
+  promotedAt?: string | null;
+  cancellationReason?: string | null;
+  source?: string;
+  waitlistPosition?: number;
   user?: {
     id: string;
     firstName: string;

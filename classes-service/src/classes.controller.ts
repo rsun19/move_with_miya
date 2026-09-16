@@ -35,6 +35,8 @@ export class ClassesController {
     locationId: number;
     status?: string;
     isPrivate?: boolean;
+    waitlistEnabled?: boolean;
+    cancellationCutoffHours?: number;
   }) {
     return this.classesService.createClass(data);
   }
