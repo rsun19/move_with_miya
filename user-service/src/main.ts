@@ -15,6 +15,39 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV');
+  const sessionSecret = configService.get<string>('SESSION_SECRET');
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  if (
+    nodeEnv === 'production' &&
+    (!sessionSecret ||
+      sessionSecret.length < 32 ||
+      [
+        'change-me-to-a-random-string',
+        'dev-secret-change-in-production',
+      ].includes(sessionSecret))
+  ) {
+    throw new Error(
+      'SESSION_SECRET must be a strong, non-placeholder value in production',
+    );
+  }
+  if (nodeEnv === 'production') {
+    let parsedOrigin: URL | undefined;
+    try {
+      parsedOrigin = corsOrigin ? new URL(corsOrigin) : undefined;
+    } catch {
+      parsedOrigin = undefined;
+    }
+    if (
+      !parsedOrigin ||
+      parsedOrigin.protocol !== 'https:' ||
+      parsedOrigin.origin !== corsOrigin
+    ) {
+      throw new Error(
+        'CORS_ORIGIN must be a single HTTPS origin in production',
+      );
+    }
+  }
 
   const redisClient = createClient({
     url: configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
@@ -24,15 +57,12 @@ async function bootstrap() {
   app.use(
     session({
       store: new RedisStore({ client: redisClient }),
-      secret: configService.get<string>(
-        'SESSION_SECRET',
-        'dev-secret-change-in-production',
-      ),
+      secret: sessionSecret || 'dev-secret-change-in-production',
       resave: false,
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: configService.get<string>('NODE_ENV') === 'production',
+        secure: nodeEnv === 'production',
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       },
@@ -40,7 +70,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:5173'),
+    origin: corsOrigin || 'http://localhost:5173',
     credentials: true,
   });
 

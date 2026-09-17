@@ -7,6 +7,7 @@ import session from 'express-session';
 import { AppModule } from './app.module';
 import { RedisService } from './redis.service';
 import type { RedisClient } from './redis.service';
+import express from 'express';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { RedisStore } = require('connect-redis') as {
@@ -16,8 +17,48 @@ const { RedisStore } = require('connect-redis') as {
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
   const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV');
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  const sessionSecret = configService.get<string>('SESSION_SECRET');
+  if (
+    nodeEnv === 'production' &&
+    (!sessionSecret ||
+      sessionSecret.length < 32 ||
+      [
+        'change-me-to-a-random-string',
+        'dev-secret-change-in-production',
+      ].includes(sessionSecret))
+  ) {
+    throw new Error(
+      'SESSION_SECRET must be a strong, non-placeholder value in production',
+    );
+  }
+  if (nodeEnv === 'production') {
+    let parsedOrigin: URL | undefined;
+    try {
+      parsedOrigin = corsOrigin ? new URL(corsOrigin) : undefined;
+    } catch {
+      parsedOrigin = undefined;
+    }
+    if (
+      !parsedOrigin ||
+      parsedOrigin.protocol !== 'https:' ||
+      parsedOrigin.origin !== corsOrigin
+    ) {
+      throw new Error(
+        'CORS_ORIGIN must be a single valid origin in production',
+      );
+    }
+  }
+
+  app.enableCors({
+    origin: corsOrigin || 'http://localhost:5173',
+    credentials: true,
+  });
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
@@ -30,21 +71,21 @@ async function bootstrap() {
     },
   });
 
-  app.set(
-    'trust proxy',
-    configService.get<string>('NODE_ENV') === 'production' ? 1 : false,
-  );
+  app.set('trust proxy', nodeEnv === 'production' ? 1 : false);
 
   const redisService = app.get(RedisService);
   await redisService.connect();
 
   app.use(
+    '/checkout/webhook',
+    express.raw({ type: 'application/json', limit: '256kb' }),
+  );
+  app.use(express.json({ limit: '256kb' }));
+
+  app.use(
     session({
       store: new RedisStore({ client: redisService.getClient() }),
-      secret: configService.get<string>(
-        'SESSION_SECRET',
-        'dev-secret-change-in-production',
-      ),
+      secret: sessionSecret || 'dev-secret-change-in-production',
       resave: false,
       saveUninitialized: false,
       cookie: {

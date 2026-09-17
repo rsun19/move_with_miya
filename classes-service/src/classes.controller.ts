@@ -37,6 +37,7 @@ export class ClassesController {
     isPrivate?: boolean;
     waitlistEnabled?: boolean;
     cancellationCutoffHours?: number;
+    refundPolicy?: unknown;
   }) {
     return this.classesService.createClass(data);
   }
