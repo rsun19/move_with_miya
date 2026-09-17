@@ -221,6 +221,28 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
       if (existing.status === 'open' && existing.url) {
         return { url: existing.url, paymentId: payment.id };
       }
+
+      // A completed Checkout Session may still be waiting for its webhook to
+      // reach us. Never expire it and create another session: that can charge
+      // the customer twice before the duplicate is eventually refunded.
+      if (
+        existing.status === 'complete' ||
+        existing.payment_status === 'paid'
+      ) {
+        if (existing.payment_status === 'paid') {
+          await this.handleCheckoutSuccess(existing);
+        }
+        throw new ConflictException(
+          'Payment is already being processed; check your dashboard',
+        );
+      }
+
+      if (existing.status !== 'expired') {
+        throw new ConflictException(
+          'Payment is already being processed; check your dashboard',
+        );
+      }
+
       await this.rpc('mark_payment_expired', { id: payment.id });
       payment = await this.rpc<PaymentRecord>('create_or_get_pending_payment', {
         userId,

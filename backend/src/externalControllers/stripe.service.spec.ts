@@ -111,6 +111,109 @@ describe('StripeService', () => {
     );
   });
 
+  it('does not create a second session when the existing session is complete', async () => {
+    const payment = {
+      id: 'payment-1',
+      userId: 'user-1',
+      classId: 1,
+      amountCents: 1550,
+      currency: 'usd',
+      status: 'Pending',
+      refundStatus: 'None',
+      stripeCheckoutSessionId: 'cs_complete',
+    };
+    const cls = {
+      id: 1,
+      name: 'Morning Flow',
+      cost: '15.50',
+      capacity: 5,
+      startDate: '2099-01-01T10:00:00.000Z',
+      endDate: '2099-01-01T11:00:00.000Z',
+      status: 'Scheduled',
+    };
+    classesClient.send.mockReturnValue(of(cls));
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ banned: false }), { status: 200 }),
+      );
+    stripeMock.checkout.sessions.retrieve.mockResolvedValue({
+      id: 'cs_complete',
+      status: 'complete',
+      payment_status: 'paid',
+      amount_total: 1550,
+      currency: 'usd',
+      payment_intent: 'pi_1',
+      client_reference_id: 'payment-1',
+      metadata: { paymentId: 'payment-1', classId: '1', userId: 'user-1' },
+    });
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(
+        cmd === 'create_or_get_pending_payment'
+          ? payment
+          : cmd === 'get_payment_by_id'
+            ? payment
+            : cmd === 'finalize_paid_registration'
+              ? { payment, needsRefund: false }
+              : {},
+      ),
+    );
+
+    await expect(service.createCheckoutSession('user-1', 1)).rejects.toThrow(
+      'Payment is already being processed; check your dashboard',
+    );
+    expect(stripeMock.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'mark_payment_expired' },
+      expect.anything(),
+    );
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'finalize_paid_registration' },
+      expect.objectContaining({ checkoutSessionId: 'cs_complete' }),
+    );
+  });
+
+  it('does not create a second session while an async payment is completing', async () => {
+    const payment = {
+      id: 'payment-1',
+      status: 'Pending',
+      amountCents: 1550,
+      currency: 'usd',
+      stripeCheckoutSessionId: 'cs_processing',
+    };
+    classesClient.send.mockReturnValue(
+      of({
+        id: 1,
+        name: 'Morning Flow',
+        cost: '15.50',
+        capacity: 5,
+        startDate: '2099-01-01T10:00:00.000Z',
+        endDate: '2099-01-01T11:00:00.000Z',
+        status: 'Scheduled',
+      }),
+    );
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ banned: false }), { status: 200 }),
+      );
+    stripeMock.checkout.sessions.retrieve.mockResolvedValue({
+      id: 'cs_processing',
+      status: 'complete',
+      payment_status: 'unpaid',
+    });
+    registrationClient.send.mockReturnValue(of(payment));
+
+    await expect(service.createCheckoutSession('user-1', 1)).rejects.toThrow(
+      'Payment is already being processed; check your dashboard',
+    );
+    expect(stripeMock.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'mark_payment_expired' },
+      expect.anything(),
+    );
+  });
+
   it('rejects class prices with more than two decimal places', async () => {
     classesClient.send.mockReturnValue(
       of({
