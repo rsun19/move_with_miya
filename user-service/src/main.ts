@@ -1,8 +1,10 @@
+import './telemetry';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import session from 'express-session';
 import { createClient } from 'redis';
+import type { NextFunction, Request, Response } from 'express';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { RedisStore } = require('connect-redis') as {
@@ -11,6 +13,9 @@ const { RedisStore } = require('connect-redis') as {
   }) => import('express-session').Store;
 };
 import { AppModule } from './app.module';
+import { recordHttpRequest } from './metrics';
+import { assertProductionConfig } from './config-validation';
+import { randomUUID } from 'node:crypto';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +23,16 @@ async function bootstrap() {
   const nodeEnv = configService.get<string>('NODE_ENV');
   const sessionSecret = configService.get<string>('SESSION_SECRET');
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  assertProductionConfig(configService, [
+    'SESSION_SECRET',
+    'CORS_ORIGIN',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'GOOGLE_CALLBACK_URL',
+    'REDIS_URL',
+    'RABBITMQ_URL',
+    'DATABASE_URL',
+  ]);
   if (
     nodeEnv === 'production' &&
     (!sessionSecret ||
@@ -75,6 +90,39 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const started = Date.now();
+    const incomingRequestId = req.header('x-request-id');
+    const requestId =
+      incomingRequestId && /^[A-Za-z0-9._:-]{1,128}$/.test(incomingRequestId)
+        ? incomingRequestId
+        : randomUUID();
+    res.setHeader('X-Request-ID', requestId);
+    res.on('finish', () => {
+      const durationMs = Date.now() - started;
+      const route = (req as unknown as { route?: { path?: unknown } }).route;
+      recordHttpRequest(
+        req.method,
+        typeof route?.path === 'string' ? route.path : 'unmatched',
+        res.statusCode,
+        durationMs,
+      );
+      console.log(
+        JSON.stringify({
+          event: 'http_request',
+          service: process.env.OTEL_SERVICE_NAME ?? 'user-service',
+          requestId,
+          traceparent: req.header('traceparent') ?? null,
+          method: req.method,
+          route: req.path.replace(/\d+/g, ':id'),
+          statusCode: res.statusCode,
+          durationMs,
+        }),
+      );
+    });
+    next();
+  });
 
   const port = configService.get<number>('PORT', 3003);
   await app.listen(port);

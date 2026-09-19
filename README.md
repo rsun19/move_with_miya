@@ -162,10 +162,12 @@ npm run audit:fix     # npm audit fix across all services
 ## Production
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+ENV_FILE=/path/to/.env.production ./ops/deploy.sh
 ```
 
-Requires the following to be set in `.env`:
+Use [.env.production.example](.env.production.example) as the configuration matrix. Store the populated file outside the repository. The deployment script validates configuration, runs database migrations as one-shot jobs, starts the application and observability services, and runs public smoke checks.
+
+The production stack requires:
 
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - `RABBITMQ_USER`, `RABBITMQ_PASS`
@@ -175,6 +177,7 @@ Requires the following to be set in `.env`:
 - `GOOGLE_CALLBACK_URL`
 - `PUBLIC_APP_URL`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_CURRENCY`
+- `TLS_CERT_FILE`, `TLS_KEY_FILE`, and `GRAFANA_ADMIN_PASSWORD`
 
 Production checklist:
 
@@ -185,3 +188,5 @@ Production checklist:
 - [ ] Use Stripe live credentials only in production and verify webhook signature failures are rejected.
 - [ ] Set checkout rate limits appropriate to the deployment and confirm Redis is reachable before accepting payments.
 - [ ] Verify `POSTGRES_PASSWORD` and `RABBITMQ_PASS` are unique, strong credentials before exposing the stack publicly.
+- [ ] Confirm the admin Observability tab is available and non-admin requests receive `403`.
+- [ ] Run the backup/restore drill documented in [docs/production-runbook.md](docs/production-runbook.md).
