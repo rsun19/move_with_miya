@@ -15,10 +15,14 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import Stripe from 'stripe';
 import { fetchActiveUser } from '../common/user-verification';
+import { RedisService } from '../redis.service';
 
 // Stripe rejects Checkout sessions that expire less than 30 minutes after
 // creation; keep a margin for the RPC round-trips before the create call.
 const CHECKOUT_SESSION_TTL_MS = 35 * 60 * 1000;
+
+const REFUND_SWEEP_INTERVAL_MS = 60_000;
+const REFUND_SWEEP_LOCK_KEY = 'stripe:refund-sweep-lock';
 
 interface ClassRecord {
   id: number;
@@ -53,11 +57,13 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StripeService.name);
   private readonly stripe: Stripe;
   private retryTimer?: ReturnType<typeof setInterval>;
+  private sweeping = false;
 
   constructor(
     private readonly config: ConfigService,
     @Inject('REGISTRATION_SERVICE') private readonly registrations: ClientProxy,
     @Inject('CLASSES_SERVICE') private readonly classes: ClientProxy,
+    private readonly redis: RedisService,
   ) {
     this.stripe = new Stripe(
       this.config.get<string>('STRIPE_SECRET_KEY', 'sk_test_unconfigured'),
@@ -89,7 +95,10 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
           'STRIPE_CURRENCY must be a three-letter lowercase code',
         );
     }
-    this.retryTimer = setInterval(() => void this.retryRefunds(), 60_000);
+    this.retryTimer = setInterval(
+      () => void this.retryRefunds(),
+      REFUND_SWEEP_INTERVAL_MS,
+    );
   }
 
   onModuleDestroy() {
@@ -605,8 +614,16 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     return results;
   }
 
+  /**
+   * Retries refunds that are due. The registration service applies backoff
+   * and an attempt cap; the lock keeps concurrent backend instances from
+   * sweeping the same payments.
+   */
   async retryRefunds() {
+    if (this.sweeping) return;
+    this.sweeping = true;
     try {
+      if (!(await this.acquireSweepLock())) return;
       const payments = await this.rpc<PaymentRecord[]>(
         'list_refund_pending_payments',
         {},
@@ -616,7 +633,25 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
       }
     } catch {
       this.logger.warn('Refund retry sweep failed');
+    } finally {
+      this.sweeping = false;
     }
+  }
+
+  private async acquireSweepLock(): Promise<boolean> {
+    // Expires just before the next interval so a crashed holder cannot
+    // block later sweeps.
+    const result = await this.redis
+      .getClient()
+      .sendCommand([
+        'SET',
+        REFUND_SWEEP_LOCK_KEY,
+        String(process.pid),
+        'NX',
+        'PX',
+        String(REFUND_SWEEP_INTERVAL_MS - 5_000),
+      ]);
+    return (result as unknown) === 'OK';
   }
 
   getAllPayments() {
