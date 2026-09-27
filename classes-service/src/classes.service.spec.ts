@@ -126,6 +126,127 @@ describe('ClassesService date validation', () => {
         service.createClass({ ...base, cancellationCutoffHours: -1 }),
       ).toThrow(BadRequestException);
     });
+
+    it('rejects prices with more than two decimal places', () => {
+      expect(() => service.createClass({ ...base, cost: '12.345' })).toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('validates refund policy tiers', () => {
+      expect(() =>
+        service.createClass({
+          ...base,
+          refundPolicy: [{ hoursBeforeStart: 24, percentage: 101 }],
+        }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('rejects coerced or extra refund tier fields', () => {
+      expect(() =>
+        service.createClass({
+          ...base,
+          refundPolicy: [{ hoursBeforeStart: null, percentage: true } as never],
+        }),
+      ).toThrow(BadRequestException);
+      expect(() =>
+        service.createClass({
+          ...base,
+          refundPolicy: [
+            { hoursBeforeStart: 24, percentage: 100, note: 'unexpected' },
+          ],
+        }),
+      ).toThrow(BadRequestException);
+    });
+
+    it.each([
+      [[], 'refundPolicy must be a non-empty array'],
+      [
+        { hoursBeforeStart: 24, percentage: 100 },
+        'refundPolicy must be a non-empty array',
+      ],
+      [[null], 'refundPolicy[0] is invalid'],
+      [['24h'], 'refundPolicy[0] is invalid'],
+      [
+        [{ hoursBeforeStart: -1, percentage: 100 }],
+        'refundPolicy[0].hoursBeforeStart must be a non-negative integer',
+      ],
+      [
+        [{ hoursBeforeStart: 1.5, percentage: 100 }],
+        'refundPolicy[0].hoursBeforeStart must be a non-negative integer',
+      ],
+      [
+        [{ hoursBeforeStart: 24, percentage: -1 }],
+        'refundPolicy[0].percentage must be an integer from 0 to 100',
+      ],
+      [
+        [{ hoursBeforeStart: 24, percentage: 50.5 }],
+        'refundPolicy[0].percentage must be an integer from 0 to 100',
+      ],
+      [
+        [
+          { hoursBeforeStart: 24, percentage: 100 },
+          { hoursBeforeStart: 24, percentage: 50 },
+        ],
+        'refundPolicy thresholds must be unique',
+      ],
+      [
+        [{ hoursBeforeStart: 48, percentage: 100 }],
+        'refundPolicy must include a tier applicable at the cancellation cutoff',
+      ],
+    ])('rejects refund policy %j', (refundPolicy, message) => {
+      expect(() => service.createClass({ ...base, refundPolicy })).toThrow(
+        message,
+      );
+    });
+
+    it('stores refund tiers ordered from the earliest cancellation', async () => {
+      await service.createClass({
+        ...base,
+        cancellationCutoffHours: 12,
+        refundPolicy: [
+          { hoursBeforeStart: 12, percentage: 25 },
+          { hoursBeforeStart: 72, percentage: 100 },
+          { hoursBeforeStart: 24, percentage: 50 },
+        ],
+      });
+
+      expect(prisma.yogaClass.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cancellationCutoffHours: 12,
+            refundPolicy: [
+              { hoursBeforeStart: 72, percentage: 100 },
+              { hoursBeforeStart: 24, percentage: 50 },
+              { hoursBeforeStart: 12, percentage: 25 },
+            ],
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('defaults to a full refund until 24 hours before start', async () => {
+      await service.createClass(base);
+
+      expect(prisma.yogaClass.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cancellationCutoffHours: 24,
+            refundPolicy: [{ hoursBeforeStart: 24, percentage: 100 }],
+          }) as unknown,
+        }),
+      );
+    });
+
+    it.each(['0', '15', '15.5', '15.50', 20])('accepts price %p', (cost) => {
+      expect(() => service.createClass({ ...base, cost })).not.toThrow();
+    });
+
+    it.each(['-1', '1e3', 'abc', '', '15.'])('rejects price %p', (cost) => {
+      expect(() => service.createClass({ ...base, cost })).toThrow(
+        'cost must be a non-negative number',
+      );
+    });
   });
 
   it('loads classes with their locations', async () => {
@@ -178,6 +299,22 @@ describe('ClassesService date validation', () => {
       });
     });
 
+    it('parses a price update to a number', async () => {
+      prisma.yogaClass.update.mockResolvedValue({ id: 1 });
+      await service.updateClass(1, { cost: '18.50' });
+      expect(prisma.yogaClass.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { cost: 18.5 },
+        include: { location: true },
+      });
+    });
+
+    it('rejects a price update with sub-cent precision', () => {
+      expect(() => service.updateClass(1, { cost: '18.505' })).toThrow(
+        'cost must be a non-negative number',
+      );
+    });
+
     it('converts a valid startDate to a Date', async () => {
       prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
         startDate: new Date('2026-09-01T09:00:00.000Z'),
@@ -214,6 +351,57 @@ describe('ClassesService date validation', () => {
       expect(() => service.updateClass(1, { startDate: 'nope' })).toThrow(
         BadRequestException,
       );
+    });
+
+    it('validates a cutoff update against the persisted refund policy', async () => {
+      prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
+        startDate: new Date('2026-09-01T10:00:00.000Z'),
+        endDate: new Date('2026-09-01T11:00:00.000Z'),
+        cancellationCutoffHours: 48,
+        refundPolicy: [{ hoursBeforeStart: 48, percentage: 100 }],
+      });
+
+      await expect(
+        service.updateClass(1, { cancellationCutoffHours: 24 }),
+      ).rejects.toThrow(
+        'refundPolicy must include a tier applicable at the cancellation cutoff',
+      );
+      expect(prisma.yogaClass.update).not.toHaveBeenCalled();
+    });
+
+    it('validates a refund policy update against the effective cutoff', async () => {
+      prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
+        startDate: new Date('2026-09-01T10:00:00.000Z'),
+        endDate: new Date('2026-09-01T11:00:00.000Z'),
+        cancellationCutoffHours: 24,
+        refundPolicy: [{ hoursBeforeStart: 24, percentage: 100 }],
+      });
+
+      await expect(
+        service.updateClass(1, {
+          refundPolicy: [{ hoursBeforeStart: 48, percentage: 100 }],
+        }),
+      ).rejects.toThrow(
+        'refundPolicy must include a tier applicable at the cancellation cutoff',
+      );
+      expect(prisma.yogaClass.update).not.toHaveBeenCalled();
+    });
+
+    it('accepts a refund policy and cutoff update when the pair is compatible', async () => {
+      prisma.yogaClass.findUniqueOrThrow.mockResolvedValue({
+        startDate: new Date('2026-09-01T10:00:00.000Z'),
+        endDate: new Date('2026-09-01T11:00:00.000Z'),
+        cancellationCutoffHours: 24,
+        refundPolicy: [{ hoursBeforeStart: 24, percentage: 100 }],
+      });
+      prisma.yogaClass.update.mockResolvedValue({ id: 1 });
+
+      await expect(
+        service.updateClass(1, {
+          cancellationCutoffHours: 12,
+          refundPolicy: [{ hoursBeforeStart: 12, percentage: 50 }],
+        }),
+      ).resolves.toEqual({ id: 1 });
     });
   });
 });
