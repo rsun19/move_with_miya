@@ -201,6 +201,7 @@ jobs:
       STRIPE_CURRENCY: usd
       TLS_CERT_FILE: /tmp/fullchain.pem
       TLS_KEY_FILE: /tmp/privkey.pem
+      GRAFANA_ADMIN_PASSWORD: ci-grafana-password-0123456789
     steps:
       - uses: actions/checkout@v4
         with:

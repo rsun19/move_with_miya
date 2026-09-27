@@ -178,6 +178,7 @@ The production stack requires:
 - `PUBLIC_APP_URL`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_CURRENCY`
 - `PUBLIC_HOST`, `TLS_CERT_FILE`, and `TLS_KEY_FILE`
+- `GRAFANA_ADMIN_PASSWORD`
 
 Production checklist:
 
@@ -188,3 +189,4 @@ Production checklist:
 - [ ] Use Stripe live credentials only in production and verify webhook signature failures are rejected.
 - [ ] Set checkout rate limits appropriate to the deployment and confirm Redis is reachable before accepting payments.
 - [ ] Verify `POSTGRES_PASSWORD` and `RABBITMQ_PASS` are unique, strong credentials before exposing the stack publicly.
+- [ ] Confirm the admin Observability tab is available and non-admin requests receive `403`.
