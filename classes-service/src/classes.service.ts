@@ -2,6 +2,15 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
 import { ClassStatus } from './generated/prisma/client';
 
+export interface RefundTier {
+  hoursBeforeStart: number;
+  percentage: number;
+}
+
+export const DEFAULT_REFUND_POLICY: RefundTier[] = [
+  { hoursBeforeStart: 24, percentage: 100 },
+];
+
 @Injectable()
 export class ClassesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -41,7 +50,11 @@ export class ClassesService {
   }
 
   private parseNonNegativeNumber(value: unknown, field: string): number {
-    const number = typeof value === 'number' ? value : Number(value);
+    const raw = String(value).trim();
+    if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
+      throw new BadRequestException(`${field} must be a non-negative number`);
+    }
+    const number = Number(raw);
     if (!Number.isFinite(number) || number < 0) {
       throw new BadRequestException(`${field} must be a non-negative number`);
     }
@@ -64,6 +77,69 @@ export class ClassesService {
     return number;
   }
 
+  private parseRefundPolicy(value: unknown): RefundTier[] {
+    if (value === undefined) return DEFAULT_REFUND_POLICY;
+    if (!Array.isArray(value) || value.length === 0) {
+      throw new BadRequestException('refundPolicy must be a non-empty array');
+    }
+
+    const tiers = value.map((tier, index) => {
+      if (!tier || typeof tier !== 'object') {
+        throw new BadRequestException(`refundPolicy[${index}] is invalid`);
+      }
+      const candidate = tier as Record<string, unknown>;
+      const keys = Object.keys(candidate).sort();
+      if (
+        keys.length !== 2 ||
+        keys[0] !== 'hoursBeforeStart' ||
+        keys[1] !== 'percentage'
+      ) {
+        throw new BadRequestException(
+          `refundPolicy[${index}] must contain only hoursBeforeStart and percentage`,
+        );
+      }
+      const hoursBeforeStart = candidate.hoursBeforeStart;
+      const percentage = candidate.percentage;
+      if (
+        typeof hoursBeforeStart !== 'number' ||
+        !Number.isSafeInteger(hoursBeforeStart) ||
+        hoursBeforeStart < 0
+      ) {
+        throw new BadRequestException(
+          `refundPolicy[${index}].hoursBeforeStart must be a non-negative integer`,
+        );
+      }
+      if (
+        typeof percentage !== 'number' ||
+        !Number.isSafeInteger(percentage) ||
+        percentage < 0 ||
+        percentage > 100
+      ) {
+        throw new BadRequestException(
+          `refundPolicy[${index}].percentage must be an integer from 0 to 100`,
+        );
+      }
+      return { hoursBeforeStart, percentage };
+    });
+
+    const thresholds = new Set(tiers.map((tier) => tier.hoursBeforeStart));
+    if (thresholds.size !== tiers.length) {
+      throw new BadRequestException('refundPolicy thresholds must be unique');
+    }
+    return tiers.sort((a, b) => b.hoursBeforeStart - a.hoursBeforeStart);
+  }
+
+  private validateRefundPolicyCutoff(
+    policy: RefundTier[],
+    cutoffHours: number,
+  ): void {
+    if (!policy.some((tier) => tier.hoursBeforeStart <= cutoffHours)) {
+      throw new BadRequestException(
+        'refundPolicy must include a tier applicable at the cancellation cutoff',
+      );
+    }
+  }
+
   createClass(data: {
     name: string;
     teacherIds: string[];
@@ -79,6 +155,7 @@ export class ClassesService {
     isPrivate?: boolean;
     waitlistEnabled?: boolean;
     cancellationCutoffHours?: number;
+    refundPolicy?: unknown;
   }) {
     const startDate = this.parseDate(data.startDate, 'startDate');
     const endDate = this.parseDate(data.endDate, 'endDate');
@@ -95,6 +172,12 @@ export class ClassesService {
     ) {
       throw new BadRequestException('waitlistEnabled must be a boolean');
     }
+    const refundPolicy = this.parseRefundPolicy(data.refundPolicy);
+    const cancellationCutoffHours = this.parseNonNegativeInteger(
+      data.cancellationCutoffHours ?? 24,
+      'cancellationCutoffHours',
+    );
+    this.validateRefundPolicyCutoff(refundPolicy, cancellationCutoffHours);
 
     return this.prisma.client.yogaClass.create({
       data: {
@@ -111,10 +194,11 @@ export class ClassesService {
         status: status as ClassStatus,
         isPrivate: data.isPrivate ?? false,
         waitlistEnabled: data.waitlistEnabled ?? true,
-        cancellationCutoffHours: this.parseNonNegativeInteger(
-          data.cancellationCutoffHours ?? 24,
-          'cancellationCutoffHours',
-        ),
+        cancellationCutoffHours,
+        refundPolicy: refundPolicy.map((tier) => ({
+          hoursBeforeStart: tier.hoursBeforeStart,
+          percentage: tier.percentage,
+        })),
       },
       include: { location: true },
     });
@@ -149,6 +233,9 @@ export class ClassesService {
         'cancellationCutoffHours',
       );
     }
+    if ('refundPolicy' in updateData) {
+      updateData.refundPolicy = this.parseRefundPolicy(updateData.refundPolicy);
+    }
     if (
       'status' in updateData &&
       !Object.values(ClassStatus).includes(updateData.status as ClassStatus)
@@ -161,9 +248,12 @@ export class ClassesService {
     ) {
       throw new BadRequestException('waitlistEnabled must be a boolean');
     }
-    const hasScheduleUpdate =
-      'startDate' in updateData || 'endDate' in updateData;
-    if (!hasScheduleUpdate) {
+    const needsPersistedValidation =
+      'startDate' in updateData ||
+      'endDate' in updateData ||
+      'refundPolicy' in updateData ||
+      'cancellationCutoffHours' in updateData;
+    if (!needsPersistedValidation) {
       return this.prisma.client.yogaClass.update({
         where: { id },
         data: updateData,
@@ -175,7 +265,12 @@ export class ClassesService {
       async (tx) => {
         const persistedClass = await tx.yogaClass.findUniqueOrThrow({
           where: { id },
-          select: { startDate: true, endDate: true },
+          select: {
+            startDate: true,
+            endDate: true,
+            cancellationCutoffHours: true,
+            refundPolicy: true,
+          },
         });
         const startDate = (
           'startDate' in updateData
@@ -188,6 +283,21 @@ export class ClassesService {
 
         if (endDate <= startDate) {
           throw new BadRequestException('endDate must be after startDate');
+        }
+
+        if (
+          'refundPolicy' in updateData ||
+          'cancellationCutoffHours' in updateData
+        ) {
+          const refundPolicy =
+            'refundPolicy' in updateData
+              ? (updateData.refundPolicy as RefundTier[])
+              : this.parseRefundPolicy(persistedClass.refundPolicy);
+          const cutoffHours =
+            'cancellationCutoffHours' in updateData
+              ? (updateData.cancellationCutoffHours as number)
+              : persistedClass.cancellationCutoffHours;
+          this.validateRefundPolicyCutoff(refundPolicy, cutoffHours);
         }
 
         return tx.yogaClass.update({
