@@ -36,6 +36,7 @@ import type {
   AdminUser,
   ContactSubmission,
   Location,
+  Payment,
   Registration,
   YogaClass,
 } from '@/lib/types';
@@ -46,9 +47,16 @@ interface AdminDashboardProps {
   initialContact: ContactSubmission[];
   initialUsers: AdminUser[];
   initialRegistrations: Registration[];
+  initialPayments?: Payment[];
 }
 
-type TabValue = 'classes' | 'locations' | 'registrations' | 'contact' | 'users';
+type TabValue =
+  | 'classes'
+  | 'locations'
+  | 'registrations'
+  | 'payments'
+  | 'contact'
+  | 'users';
 
 const emptyClassForm = {
   name: '',
@@ -64,6 +72,7 @@ const emptyClassForm = {
   status: 'Scheduled',
   waitlistEnabled: true,
   cancellationCutoffHours: '24',
+  refundTiers: [{ hoursBeforeStart: '24', percentage: '100' }],
 };
 
 const emptyLocationForm = {
@@ -80,6 +89,7 @@ export default function AdminDashboard({
   initialContact,
   initialUsers,
   initialRegistrations,
+  initialPayments = [],
 }: AdminDashboardProps) {
   const [tab, setTab] = useState<TabValue>('classes');
   const [classes, setClasses] = useState<YogaClass[]>(initialClasses);
@@ -88,6 +98,7 @@ export default function AdminDashboard({
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
   const [registrations, setRegistrations] =
     useState<Registration[]>(initialRegistrations);
+  const [payments, setPayments] = useState<Payment[]>(initialPayments);
 
   const [classDialog, setClassDialog] = useState(false);
   const [editingClass, setEditingClass] = useState<YogaClass | null>(null);
@@ -112,6 +123,34 @@ export default function AdminDashboard({
   const showError = (msg: string) => {
     setError(msg);
     setNotice(null);
+  };
+
+  // Refreshes the payments tab after an action that may have queued refunds.
+  // The action itself already succeeded, so a failed refresh is not an error.
+  const reloadPayments = async () => {
+    try {
+      setPayments(await api<Payment[]>('/api/checkout/payments'));
+    } catch {
+      // Keep the current list.
+    }
+  };
+
+  const handleRefund = async (payment: Payment) => {
+    try {
+      // With no refund requested yet (or one ruled ineligible by the member
+      // cancellation policy) issue a full refund; otherwise retry as queued.
+      const fullRefund =
+        payment.refundStatus === 'None' ||
+        payment.refundStatus === 'NotEligible';
+      await api(`/api/checkout/payments/${payment.id}/refund`, {
+        method: 'POST',
+        ...(fullRefund && { body: JSON.stringify({ percentage: 100 }) }),
+      });
+      await reloadPayments();
+      showNotice('Refund request processed.');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Refund failed.');
+    }
   };
 
   const handleTabChange = (value: TabValue) => {
@@ -145,6 +184,12 @@ export default function AdminDashboard({
       status: cls.status,
       waitlistEnabled: cls.waitlistEnabled ?? true,
       cancellationCutoffHours: String(cls.cancellationCutoffHours ?? 24),
+      refundTiers: (
+        cls.refundPolicy ?? [{ hoursBeforeStart: 24, percentage: 100 }]
+      ).map((tier) => ({
+        hoursBeforeStart: String(tier.hoursBeforeStart),
+        percentage: String(tier.percentage),
+      })),
     });
     setClassDialog(true);
   };
@@ -159,6 +204,22 @@ export default function AdminDashboard({
       }
       if (classForm.cost === '' || Number.isNaN(Number(classForm.cost))) {
         errors.cost = 'Cost is required.';
+      }
+      if (
+        classForm.refundTiers.some((tier) => {
+          const hours = Number(tier.hoursBeforeStart);
+          const percentage = Number(tier.percentage);
+          return (
+            !Number.isInteger(hours) ||
+            hours < 0 ||
+            !Number.isInteger(percentage) ||
+            percentage < 0 ||
+            percentage > 100
+          );
+        })
+      ) {
+        errors.refundPolicy =
+          'Refund tiers must use whole hours and percentages from 0 to 100.';
       }
       if (!classForm.duration || Number(classForm.duration) <= 0) {
         errors.duration = 'Duration must be greater than 0.';
@@ -202,6 +263,10 @@ export default function AdminDashboard({
         status: classForm.status,
         waitlistEnabled: classForm.waitlistEnabled,
         cancellationCutoffHours: Number(classForm.cancellationCutoffHours),
+        refundPolicy: classForm.refundTiers.map((tier) => ({
+          hoursBeforeStart: Number(tier.hoursBeforeStart),
+          percentage: Number(tier.percentage),
+        })),
       };
       if (editingClass) {
         const canceling =
@@ -253,6 +318,7 @@ export default function AdminDashboard({
       ]);
       setClasses(updatedClasses);
       setRegistrations(updatedRegistrations);
+      await reloadPayments();
       showNotice('Class canceled and registrations updated.');
     } catch (err) {
       showError(
@@ -331,6 +397,7 @@ export default function AdminDashboard({
             : reg,
         ),
       );
+      await reloadPayments();
       showNotice('Registration cancelled.');
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Cancel failed.');
@@ -432,6 +499,7 @@ export default function AdminDashboard({
         <Tab label="Classes" value="classes" />
         <Tab label="Locations" value="locations" />
         <Tab label="Registrations" value="registrations" />
+        <Tab label="Payments" value="payments" />
         <Tab label="Contact" value="contact" />
         <Tab label="Users" value="users" />
       </Tabs>
@@ -683,6 +751,86 @@ export default function AdminDashboard({
         </Stack>
       )}
 
+      {tab === 'payments' && (
+        <TableContainer component={Paper}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Payment</TableCell>
+                <TableCell>Class</TableCell>
+                <TableCell>Amount</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Refund</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {payments.map((payment) => (
+                <TableRow key={payment.id}>
+                  <TableCell>{payment.id.slice(0, 8)}</TableCell>
+                  <TableCell>
+                    {classes.find((cls) => cls.id === payment.classId)?.name ??
+                      payment.classId}
+                  </TableCell>
+                  <TableCell>
+                    {(payment.amountCents / 100).toFixed(2)}{' '}
+                    {payment.currency.toUpperCase()}
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={payment.status} size="small" />
+                  </TableCell>
+                  <TableCell>
+                    {payment.refundStatus}
+                    {payment.refundAmountCents != null && (
+                      <>
+                        {' '}
+                        ({(payment.refundAmountCents / 100).toFixed(2)}{' '}
+                        {payment.currency.toUpperCase()})
+                      </>
+                    )}
+                    {payment.refundNeedsAttention && (
+                      <Chip
+                        label={`Needs attention (${payment.refundAttempts ?? 0} attempts)`}
+                        color="warning"
+                        size="small"
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                    {payment.refundError && (
+                      <Typography
+                        variant="caption"
+                        color="error"
+                        sx={{ display: 'block' }}
+                      >
+                        {payment.refundError}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {payment.status === 'Paid' &&
+                      payment.refundStatus !== 'Succeeded' && (
+                        <Button
+                          size="small"
+                          onClick={() => void handleRefund(payment)}
+                        >
+                          Refund
+                        </Button>
+                      )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {payments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No payments yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
       {tab === 'contact' && (
         <TableContainer component={Paper}>
           <Table size="small">
@@ -835,6 +983,80 @@ export default function AdminDashboard({
                 error={Boolean(classErrors.capacity)}
                 helperText={classErrors.capacity}
               />
+            </Grid>
+            <Grid size={12}>
+              <Typography variant="subtitle2">Refund tiers</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Members receive the percentage for the highest threshold they
+                meet before the cancellation cutoff.
+              </Typography>
+              <Stack spacing={1} sx={{ mt: 1 }}>
+                {classForm.refundTiers.map((tier, index) => (
+                  <Stack key={index} direction="row" spacing={1}>
+                    <TextField
+                      label="Hours before start"
+                      type="number"
+                      size="small"
+                      value={tier.hoursBeforeStart}
+                      onChange={(event) => {
+                        const refundTiers = [...classForm.refundTiers];
+                        refundTiers[index] = {
+                          ...tier,
+                          hoursBeforeStart: event.target.value,
+                        };
+                        setClassForm({ ...classForm, refundTiers });
+                      }}
+                    />
+                    <TextField
+                      label="Refund %"
+                      type="number"
+                      size="small"
+                      value={tier.percentage}
+                      onChange={(event) => {
+                        const refundTiers = [...classForm.refundTiers];
+                        refundTiers[index] = {
+                          ...tier,
+                          percentage: event.target.value,
+                        };
+                        setClassForm({ ...classForm, refundTiers });
+                      }}
+                    />
+                    <Button
+                      color="error"
+                      disabled={classForm.refundTiers.length === 1}
+                      onClick={() =>
+                        setClassForm({
+                          ...classForm,
+                          refundTiers: classForm.refundTiers.filter(
+                            (_, tierIndex) => tierIndex !== index,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </Stack>
+                ))}
+                {classErrors.refundPolicy && (
+                  <FormHelperText error>
+                    {classErrors.refundPolicy}
+                  </FormHelperText>
+                )}
+                <Button
+                  size="small"
+                  onClick={() =>
+                    setClassForm({
+                      ...classForm,
+                      refundTiers: [
+                        ...classForm.refundTiers,
+                        { hoursBeforeStart: '0', percentage: '0' },
+                      ],
+                    })
+                  }
+                >
+                  Add refund tier
+                </Button>
+              </Stack>
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField
