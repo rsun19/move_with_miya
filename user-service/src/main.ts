@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import session from 'express-session';
 import { createClient } from 'redis';
@@ -13,7 +14,7 @@ const { RedisStore } = require('connect-redis') as {
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const nodeEnv = configService.get<string>('NODE_ENV');
   const sessionSecret = configService.get<string>('SESSION_SECRET');
@@ -53,6 +54,8 @@ async function bootstrap() {
     url: configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
   });
   await redisClient.connect();
+
+  app.set('trust proxy', nodeEnv === 'production' ? 1 : false);
 
   app.use(
     session({

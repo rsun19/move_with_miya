@@ -35,6 +35,7 @@ function CheckoutSuccessContent() {
           `/api/checkout/status?session_id=${encodeURIComponent(sessionId)}`,
         );
         if (stopped) return;
+        setError('');
         setResult(next);
         if (next.registration?.status === 'Registered') return;
         if (

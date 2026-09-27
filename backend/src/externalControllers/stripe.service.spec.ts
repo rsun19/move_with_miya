@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import Stripe from 'stripe';
 import { StripeService } from './stripe.service';
 
@@ -108,6 +108,84 @@ describe('StripeService', () => {
     expect(registrationClient.send).toHaveBeenCalledWith(
       { cmd: 'attach_checkout_session' },
       { paymentId: 'payment-1', stripeCheckoutSessionId: 'cs_test' },
+    );
+  });
+
+  it('leaves the payment pending and reuses its idempotency key after attachment fails', async () => {
+    classesClient.send.mockReturnValue(
+      of({
+        id: 1,
+        name: 'Morning Flow',
+        cost: '15.50',
+        capacity: 5,
+        startDate: '2099-01-01T10:00:00.000Z',
+        endDate: '2099-01-01T11:00:00.000Z',
+        status: 'Scheduled',
+      }),
+    );
+    jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ banned: false }), { status: 200 }),
+        ),
+      );
+    let attachmentAttempts = 0;
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) => {
+      if (cmd === 'create_or_get_pending_payment') {
+        return of({
+          id: 'payment-1',
+          status: 'Pending',
+          amountCents: 1550,
+          currency: 'usd',
+          expiresAt: '2099-01-01T09:30:00.000Z',
+        });
+      }
+      if (cmd === 'attach_checkout_session' && attachmentAttempts++ === 0) {
+        return throwError(() => new Error('database unavailable'));
+      }
+      return of({});
+    });
+
+    await expect(service.createCheckoutSession('user-1', 1)).rejects.toThrow(
+      'Unable to start Stripe Checkout',
+    );
+    await expect(service.createCheckoutSession('user-1', 1)).resolves.toEqual({
+      url: 'https://checkout.test/session',
+      paymentId: 'payment-1',
+    });
+
+    expect(stripeMock.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    expect(stripeMock.checkout.sessions.create).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      {
+        idempotencyKey: 'checkout:user-1:1:payment-1',
+      },
+    );
+    expect(stripeMock.checkout.sessions.create).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      {
+        idempotencyKey: 'checkout:user-1:1:payment-1',
+      },
+    );
+    const expectedExpiresAt = Math.floor(
+      new Date('2099-01-01T09:30:00.000Z').getTime() / 1000,
+    );
+    expect(stripeMock.checkout.sessions.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ expires_at: expectedExpiresAt }),
+      expect.anything(),
+    );
+    expect(stripeMock.checkout.sessions.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ expires_at: expectedExpiresAt }),
+      expect.anything(),
+    );
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'mark_payment_failed' },
+      expect.anything(),
     );
   });
 
@@ -311,6 +389,148 @@ describe('StripeService', () => {
     );
   });
 
+  it('attaches a missing Checkout session from a signed paid webhook before finalization', async () => {
+    const payment = {
+      id: 'payment-1',
+      userId: 'user-1',
+      classId: 1,
+      amountCents: 1550,
+      currency: 'usd',
+      status: 'Pending',
+      refundStatus: 'None',
+      stripeCheckoutSessionId: null,
+    };
+    const attachedPayment = { ...payment, stripeCheckoutSessionId: 'cs_test' };
+    classesClient.send.mockReturnValue(
+      of({
+        id: 1,
+        name: 'Morning Flow',
+        cost: '15.50',
+        capacity: 5,
+        startDate: '2099-01-01T10:00:00.000Z',
+        endDate: '2099-01-01T11:00:00.000Z',
+        status: 'Scheduled',
+      }),
+    );
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(
+        cmd === 'get_payment_by_id'
+          ? payment
+          : cmd === 'attach_checkout_session'
+            ? attachedPayment
+            : cmd === 'finalize_paid_registration'
+              ? { payment: attachedPayment, needsRefund: false }
+              : {},
+      ),
+    );
+
+    await expect(
+      service['handleCheckoutSuccess']({
+        id: 'cs_test',
+        payment_status: 'paid',
+        amount_total: 1550,
+        currency: 'usd',
+        payment_intent: 'pi_1',
+        client_reference_id: 'payment-1',
+        metadata: { paymentId: 'payment-1', classId: '1', userId: 'user-1' },
+      } as unknown as Stripe.Checkout.Session),
+    ).resolves.toBeUndefined();
+
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'attach_checkout_session' },
+      { paymentId: 'payment-1', stripeCheckoutSessionId: 'cs_test' },
+    );
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'finalize_paid_registration' },
+      expect.objectContaining({
+        checkoutSessionId: 'cs_test',
+        amountCents: 1550,
+        currency: 'usd',
+        paymentIntentId: 'pi_1',
+      }),
+    );
+  });
+
+  it('rejects a paid webhook whose session conflicts with the stored session', async () => {
+    const payment = {
+      id: 'payment-1',
+      userId: 'user-1',
+      classId: 1,
+      stripeCheckoutSessionId: 'cs_stored',
+    };
+    registrationClient.send.mockReturnValue(of(payment));
+
+    await expect(
+      service['handleCheckoutSuccess']({
+        id: 'cs_other',
+        payment_status: 'paid',
+        amount_total: 1550,
+        currency: 'usd',
+        metadata: { paymentId: 'payment-1', classId: '1', userId: 'user-1' },
+      } as unknown as Stripe.Checkout.Session),
+    ).rejects.toThrow('Stripe Checkout session does not match payment');
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'attach_checkout_session' },
+      expect.anything(),
+    );
+  });
+
+  it('replaces a Checkout session only after Stripe confirms expiration', async () => {
+    const payment = {
+      id: 'payment-1',
+      userId: 'user-1',
+      classId: 1,
+      amountCents: 1550,
+      currency: 'usd',
+      status: 'Pending',
+      refundStatus: 'None',
+      stripeCheckoutSessionId: 'cs_expired',
+    };
+    const replacement = {
+      ...payment,
+      id: 'payment-2',
+      stripeCheckoutSessionId: null,
+    };
+    classesClient.send.mockReturnValue(
+      of({
+        id: 1,
+        name: 'Morning Flow',
+        cost: '15.50',
+        capacity: 5,
+        startDate: '2099-01-01T10:00:00.000Z',
+        endDate: '2099-01-01T11:00:00.000Z',
+        status: 'Scheduled',
+      }),
+    );
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ banned: false }), { status: 200 }),
+      );
+    stripeMock.checkout.sessions.retrieve.mockResolvedValue({
+      id: 'cs_expired',
+      status: 'expired',
+      payment_status: 'unpaid',
+    });
+    let paymentLookupCount = 0;
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) => {
+      if (cmd === 'create_or_get_pending_payment') {
+        return of(paymentLookupCount++ === 0 ? payment : replacement);
+      }
+      return of({});
+    });
+
+    await expect(service.createCheckoutSession('user-1', 1)).resolves.toEqual({
+      url: 'https://checkout.test/session',
+      paymentId: 'payment-2',
+    });
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'mark_payment_expired' },
+      { id: 'payment-1' },
+    );
+    expect(stripeMock.checkout.sessions.create).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores already-claimed webhook events', async () => {
     registrationClient.send.mockReturnValue(of({ claimed: false }));
 
@@ -462,6 +682,72 @@ describe('StripeService', () => {
         stripeRefundId: 're_succeeded',
         amountCents: 2500,
       },
+    );
+  });
+
+  it('records the actual amount for an externally initiated refund', async () => {
+    const payment = {
+      id: 'payment-1',
+      refundAmountCents: null,
+      refundStatus: 'None',
+      stripeRefundId: null,
+    };
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(
+        cmd === 'get_payment_by_payment_intent'
+          ? payment
+          : cmd === 'complete_payment_refund'
+            ? {}
+            : undefined,
+      ),
+    );
+
+    await service['handleRefundEvent']({
+      object: 'refund',
+      id: 're_external',
+      status: 'succeeded',
+      amount: 900,
+      payment_intent: 'pi_1',
+    } as unknown as Stripe.Refund);
+
+    expect(registrationClient.send).toHaveBeenCalledWith(
+      { cmd: 'complete_payment_refund' },
+      {
+        paymentId: 'payment-1',
+        stripeRefundId: 're_external',
+        amountCents: 900,
+      },
+    );
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'fail_payment_refund' },
+      expect.anything(),
+    );
+  });
+
+  it('does not mark a refund failed when post-Stripe bookkeeping fails', async () => {
+    const payment = {
+      id: 'payment-1',
+      refundAmountCents: 1000,
+      refundStatus: 'Pending',
+      stripePaymentIntentId: 'pi_1',
+    };
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      cmd === 'complete_payment_refund'
+        ? throwError(() => new ConflictException('stale refund state'))
+        : of(cmd === 'get_payment_by_id' ? payment : { ...payment }),
+    );
+    stripeMock.refunds.create.mockResolvedValue({
+      id: 're_succeeded',
+      amount: 1000,
+      status: 'succeeded',
+    });
+
+    await expect(service.refundPayment('payment-1')).rejects.toThrow(
+      'stale refund state',
+    );
+    expect(registrationClient.send).not.toHaveBeenCalledWith(
+      { cmd: 'fail_payment_refund' },
+      expect.anything(),
     );
   });
 });

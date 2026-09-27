@@ -83,6 +83,7 @@ model StripeWebhookEvent {
   eventType   String
   status      String    @default("Pending")
   error       String?
+  processingStartedAt DateTime?
   processedAt DateTime?
   createdAt   DateTime  @default(now())
 

@@ -143,6 +143,9 @@ export class RegistrationService {
         orderBy: { createdAt: 'desc' },
       });
       if (existing?.status === 'Paid') return existing;
+      if (existing?.status === 'Pending' && existing.stripeCheckoutSessionId) {
+        return existing;
+      }
       if (
         existing?.status === 'Pending' &&
         existing.expiresAt > new Date() &&
@@ -192,20 +195,27 @@ export class RegistrationService {
     if (!data.paymentId || !data.stripeCheckoutSessionId) {
       throw new RpcError(400, 'Payment and Checkout session are required');
     }
+    const attached = await this.prisma.client.payment.updateMany({
+      where: {
+        id: data.paymentId,
+        OR: [
+          { stripeCheckoutSessionId: null },
+          { stripeCheckoutSessionId: data.stripeCheckoutSessionId },
+        ],
+      },
+      data: { stripeCheckoutSessionId: data.stripeCheckoutSessionId },
+    });
     const payment = await this.prisma.client.payment.findUnique({
       where: { id: data.paymentId },
     });
     if (!payment) throw new RpcError(404, 'Payment not found');
     if (
-      payment.stripeCheckoutSessionId &&
+      attached.count === 0 &&
       payment.stripeCheckoutSessionId !== data.stripeCheckoutSessionId
     ) {
       throw new RpcError(409, 'Payment already has a Checkout session');
     }
-    return this.prisma.client.payment.update({
-      where: { id: data.paymentId },
-      data: { stripeCheckoutSessionId: data.stripeCheckoutSessionId },
-    });
+    return payment;
   }
 
   getPaymentById(id: string) {
@@ -478,21 +488,15 @@ export class RegistrationService {
       where: { id: data.paymentId },
     });
     if (!payment) throw new RpcError(404, 'Payment not found');
+    if (payment.refundStatus !== 'None') return payment;
     if (payment.status !== 'Paid') {
       throw new RpcError(409, 'Only paid payments can be refunded');
-    }
-    if (payment.refundStatus === 'Succeeded') return payment;
-    if (
-      payment.refundStatus === 'Pending' &&
-      payment.refundPercentage !== data.percentage
-    ) {
-      throw new RpcError(409, 'A different refund is already in progress');
     }
     const refundAmountCents = Math.floor(
       (payment.amountCents * data.percentage) / 100,
     );
-    return this.prisma.client.payment.update({
-      where: { id: payment.id },
+    const claimed = await this.prisma.client.payment.updateMany({
+      where: { id: payment.id, status: 'Paid', refundStatus: 'None' },
       data: {
         refundPercentage: data.percentage,
         refundAmountCents,
@@ -501,6 +505,14 @@ export class RegistrationService {
         refundError: null,
       },
     });
+    const latest = await this.prisma.client.payment.findUnique({
+      where: { id: payment.id },
+    });
+    if (!latest) throw new RpcError(404, 'Payment not found');
+    if (claimed.count === 0 && latest.refundStatus === 'None') {
+      throw new RpcError(409, 'Payment refund changed while starting');
+    }
+    return latest;
   }
 
   async beginClassRefunds(classId: number) {
@@ -528,7 +540,10 @@ export class RegistrationService {
       where: { id: data.paymentId },
     });
     if (!payment) throw new RpcError(404, 'Payment not found');
-    if (payment.refundAmountCents !== data.amountCents) {
+    if (
+      payment.refundAmountCents != null &&
+      payment.refundAmountCents !== data.amountCents
+    ) {
       throw new RpcError(409, 'Stripe refund amount does not match payment');
     }
     if (
@@ -538,30 +553,73 @@ export class RegistrationService {
     ) {
       throw new RpcError(409, 'Stripe refund does not match payment');
     }
-    return this.prisma.client.payment.update({
-      where: { id: data.paymentId },
+    if (payment.refundStatus === 'Succeeded') return payment;
+    const completed = await this.prisma.client.payment.updateMany({
+      where: {
+        id: data.paymentId,
+        refundStatus: { not: 'Succeeded' },
+        refundAmountCents: payment.refundAmountCents,
+        stripeRefundId: payment.stripeRefundId,
+      },
       data: {
         status: 'Refunded',
         refundStatus: 'Succeeded',
+        refundAmountCents: payment.refundAmountCents ?? data.amountCents,
         stripeRefundId: data.stripeRefundId ?? payment.stripeRefundId,
         refundedAt: new Date(),
         refundError: null,
       },
     });
+    const latest = await this.prisma.client.payment.findUnique({
+      where: { id: data.paymentId },
+    });
+    if (!latest) throw new RpcError(404, 'Payment not found');
+    if (completed.count === 0 && latest.refundStatus !== 'Succeeded') {
+      throw new RpcError(409, 'Payment refund changed while completing');
+    }
+    return latest;
   }
 
-  recordPaymentRefund(paymentId: string, stripeRefundId: string) {
-    return this.prisma.client.payment.update({
+  async recordPaymentRefund(paymentId: string, stripeRefundId: string) {
+    const payment = await this.prisma.client.payment.findUnique({
       where: { id: paymentId },
+    });
+    if (!payment) throw new RpcError(404, 'Payment not found');
+    if (payment.refundStatus === 'Succeeded') return payment;
+    if (payment.stripeRefundId && payment.stripeRefundId !== stripeRefundId) {
+      throw new RpcError(409, 'Stripe refund does not match payment');
+    }
+    const recorded = await this.prisma.client.payment.updateMany({
+      where: {
+        id: paymentId,
+        refundStatus: { not: 'Succeeded' },
+        stripeRefundId: payment.stripeRefundId,
+      },
       data: { stripeRefundId },
     });
+    const latest = await this.prisma.client.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!latest) throw new RpcError(404, 'Payment not found');
+    if (recorded.count === 0 && latest.stripeRefundId !== stripeRefundId) {
+      throw new RpcError(409, 'Stripe refund changed while recording');
+    }
+    return latest;
   }
 
-  failPaymentRefund(paymentId: string, error: string) {
-    return this.prisma.client.payment.update({
-      where: { id: paymentId },
+  async failPaymentRefund(paymentId: string, error: string) {
+    const failed = await this.prisma.client.payment.updateMany({
+      where: { id: paymentId, refundStatus: { not: 'Succeeded' } },
       data: { refundStatus: 'Failed', refundError: error.slice(0, 500) },
     });
+    const payment = await this.prisma.client.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new RpcError(404, 'Payment not found');
+    if (failed.count === 0 && payment.refundStatus !== 'Succeeded') {
+      throw new RpcError(409, 'Payment refund changed while failing');
+    }
+    return payment;
   }
 
   listRefundPendingPayments() {
@@ -583,31 +641,63 @@ export class RegistrationService {
     stripeEventId: string;
     eventType: string;
   }) {
+    const now = new Date();
     try {
       const event = await this.prisma.client.stripeWebhookEvent.create({
-        data: data,
+        data: { ...data, processingStartedAt: now },
       });
       return { claimed: true, event };
     } catch (error) {
       if ((error as { code?: string }).code !== 'P2002') throw error;
+      const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
+      const claimed = await this.prisma.client.stripeWebhookEvent.updateMany({
+        where: {
+          stripeEventId: data.stripeEventId,
+          OR: [
+            { status: 'Failed' },
+            {
+              status: 'Pending',
+              OR: [
+                { processingStartedAt: null },
+                { processingStartedAt: { lt: staleBefore } },
+              ],
+            },
+          ],
+        },
+        data: {
+          status: 'Pending',
+          error: null,
+          processedAt: null,
+          processingStartedAt: now,
+        },
+      });
       const event = await this.prisma.client.stripeWebhookEvent.findUnique({
         where: { stripeEventId: data.stripeEventId },
       });
-      return { claimed: event?.status === 'Processed' ? false : true, event };
+      return { claimed: claimed.count === 1, event };
     }
   }
 
   completeStripeWebhookEvent(stripeEventId: string) {
     return this.prisma.client.stripeWebhookEvent.update({
       where: { stripeEventId },
-      data: { status: 'Processed', processedAt: new Date(), error: null },
+      data: {
+        status: 'Processed',
+        processedAt: new Date(),
+        processingStartedAt: null,
+        error: null,
+      },
     });
   }
 
   failStripeWebhookEvent(stripeEventId: string, error: string) {
     return this.prisma.client.stripeWebhookEvent.update({
       where: { stripeEventId },
-      data: { status: 'Failed', error: error.slice(0, 500) },
+      data: {
+        status: 'Failed',
+        processingStartedAt: null,
+        error: error.slice(0, 500),
+      },
     });
   }
 

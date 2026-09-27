@@ -41,6 +41,7 @@ interface PaymentRecord {
   stripeCheckoutSessionId?: string | null;
   stripePaymentIntentId?: string | null;
   stripeRefundId?: string | null;
+  expiresAt?: string | Date;
 }
 
 @Injectable()
@@ -255,8 +256,12 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     }
 
     const idempotencyKey = `checkout:${userId}:${classId}:${payment.id}`;
+    const paymentExpiresAt = payment.expiresAt
+      ? new Date(payment.expiresAt)
+      : expiresAt;
+    let session: Stripe.Checkout.Session;
     try {
-      const session = await this.stripe.checkout.sessions.create(
+      session = await this.stripe.checkout.sessions.create(
         {
           mode: 'payment',
           client_reference_id: payment.id,
@@ -280,24 +285,25 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
           ],
           success_url: `${this.appUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${this.appUrl()}/checkout/cancel?class_id=${classId}`,
-          expires_at: Math.floor(expiresAt.getTime() / 1000),
+          expires_at: Math.floor(paymentExpiresAt.getTime() / 1000),
         },
         { idempotencyKey },
       );
       if (!session.url) throw new Error('Stripe did not return a Checkout URL');
+    } catch {
+      throw new ServiceUnavailableException('Unable to start Stripe Checkout');
+    }
+
+    try {
       await this.rpc('attach_checkout_session', {
         paymentId: payment.id,
         stripeCheckoutSessionId: session.id,
       });
-      return { url: session.url, paymentId: payment.id };
-    } catch (error) {
-      await this.rpc('mark_payment_failed', {
-        id: payment.id,
-        error:
-          error instanceof Error ? error.message : 'Checkout creation failed',
-      }).catch(() => undefined);
+    } catch {
       throw new ServiceUnavailableException('Unable to start Stripe Checkout');
     }
+
+    return { url: session.url, paymentId: payment.id };
   }
 
   async statusForUser(sessionId: string, userId: string) {
@@ -387,11 +393,17 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     ) {
       throw new ConflictException('Stripe Checkout metadata is invalid');
     }
-    const payment = await this.rpc<PaymentRecord | null>('get_payment_by_id', {
+    let payment = await this.rpc<PaymentRecord | null>('get_payment_by_id', {
       id: paymentId,
     });
     if (!payment || payment.userId !== userId || payment.classId !== classId) {
       throw new ConflictException('Stripe payment ownership is invalid');
+    }
+    if (!payment.stripeCheckoutSessionId) {
+      payment = await this.rpc<PaymentRecord>('attach_checkout_session', {
+        paymentId,
+        stripeCheckoutSessionId: session.id,
+      });
     }
     if (payment.stripeCheckoutSessionId !== session.id) {
       throw new ConflictException(
@@ -446,9 +458,8 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     const actualAmount =
       object.object === 'charge' ? object.amount_refunded : object.amount;
     if (
-      !expectedAmount ||
       !Number.isInteger(actualAmount) ||
-      actualAmount !== expectedAmount
+      (expectedAmount != null && actualAmount !== expectedAmount)
     ) {
       await this.rpc('fail_payment_refund', {
         paymentId: payment.id,
@@ -471,7 +482,7 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     await this.rpc('complete_payment_refund', {
       paymentId: payment.id,
       stripeRefundId,
-      amountCents: expectedAmount,
+      amountCents: actualAmount,
     });
   }
 
@@ -502,8 +513,9 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
     if (!payment.stripePaymentIntentId || !payment.refundAmountCents) {
       throw new ConflictException('Payment cannot be refunded yet');
     }
+    let refund: Stripe.Refund;
     try {
-      const refund = await this.stripe.refunds.create(
+      refund = await this.stripe.refunds.create(
         {
           payment_intent: payment.stripePaymentIntentId,
           amount: payment.refundAmountCents,
@@ -512,31 +524,6 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
         },
         { idempotencyKey: `refund:${paymentId}` },
       );
-      if (refund.amount !== payment.refundAmountCents) {
-        await this.rpc('fail_payment_refund', {
-          paymentId,
-          error: 'Stripe refund amount did not match the requested amount',
-        });
-        throw new ConflictException('Stripe refund amount did not match');
-      }
-      if (refund.status === 'succeeded') {
-        return this.rpc('complete_payment_refund', {
-          paymentId,
-          stripeRefundId: refund.id,
-          amountCents: payment.refundAmountCents,
-        });
-      }
-      if (refund.status === 'pending') {
-        return this.rpc('record_payment_refund', {
-          paymentId,
-          stripeRefundId: refund.id,
-        });
-      }
-      await this.rpc('fail_payment_refund', {
-        paymentId,
-        error: `Stripe refund status: ${refund.status}`,
-      });
-      throw new ServiceUnavailableException('Stripe refund did not succeed');
     } catch (error) {
       await this.rpc('fail_payment_refund', {
         paymentId,
@@ -544,6 +531,32 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
       }).catch(() => undefined);
       throw new ServiceUnavailableException('Unable to issue Stripe refund');
     }
+
+    if (refund.amount !== payment.refundAmountCents) {
+      await this.rpc('fail_payment_refund', {
+        paymentId,
+        error: 'Stripe refund amount did not match the requested amount',
+      });
+      throw new ConflictException('Stripe refund amount did not match');
+    }
+    if (refund.status === 'succeeded') {
+      return this.rpc('complete_payment_refund', {
+        paymentId,
+        stripeRefundId: refund.id,
+        amountCents: payment.refundAmountCents,
+      });
+    }
+    if (refund.status === 'pending') {
+      return this.rpc('record_payment_refund', {
+        paymentId,
+        stripeRefundId: refund.id,
+      });
+    }
+    await this.rpc('fail_payment_refund', {
+      paymentId,
+      error: `Stripe refund status: ${refund.status}`,
+    });
+    throw new ServiceUnavailableException('Stripe refund did not succeed');
   }
 
   async refundClassPayments(classId: number) {

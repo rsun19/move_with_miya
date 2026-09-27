@@ -145,12 +145,27 @@ export class ClassesController {
       id,
       status: 'Canceled',
     });
-    await this.rpcRegistrations('cancel_class_registrations', {
-      classId: id,
-      reason: body.reason?.trim() || 'Class canceled',
-      source: 'class-cancellation',
-    });
-    if (this.stripeService) await this.stripeService.refundClassPayments(id);
+    let registrationCancellationError: Error | undefined;
+    try {
+      await this.rpcRegistrations('cancel_class_registrations', {
+        classId: id,
+        reason: body.reason?.trim() || 'Class canceled',
+        source: 'class-cancellation',
+      });
+    } catch (error) {
+      registrationCancellationError =
+        error instanceof Error ? error : new Error(String(error));
+    }
+
+    let refundError: Error | undefined;
+    try {
+      if (this.stripeService) await this.stripeService.refundClassPayments(id);
+    } catch (error) {
+      refundError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (registrationCancellationError) throw registrationCancellationError;
+    if (refundError) throw refundError;
     return updated;
   }
 

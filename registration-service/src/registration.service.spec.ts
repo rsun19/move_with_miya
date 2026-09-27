@@ -30,11 +30,19 @@ describe('RegistrationService', () => {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
       findMany: jest.Mock;
+      create: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     $transaction: jest.Mock;
     outboxEvent: {
       create: jest.Mock;
+    };
+    stripeWebhookEvent: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
 
@@ -67,10 +75,18 @@ describe('RegistrationService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       outboxEvent: {
         create: jest.fn().mockResolvedValue({}),
+      },
+      stripeWebhookEvent: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
       },
       $transaction: jest.fn((callback: (tx: typeof prisma) => unknown) =>
         callback(prisma),
@@ -324,6 +340,79 @@ describe('RegistrationService', () => {
     });
   });
 
+  it('reuses a pending payment with a Checkout session after a price change', async () => {
+    const payment = {
+      id: 'payment-1',
+      userId: 'user-1',
+      classId: 10,
+      amountCents: 2500,
+      currency: 'usd',
+      status: 'Pending',
+      stripeCheckoutSessionId: 'cs_open',
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    prisma.registration.findFirst.mockResolvedValue(null);
+    prisma.payment.findFirst.mockResolvedValue(payment);
+
+    await expect(
+      service.createOrGetPendingPayment({
+        userId: 'user-1',
+        classId: 10,
+        capacity: 10,
+        amountCents: 3000,
+        currency: 'usd',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toEqual(payment);
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('atomically attaches the first Checkout session and accepts a retry of the same id', async () => {
+    const payment = {
+      id: 'payment-1',
+      stripeCheckoutSessionId: 'cs_first',
+    };
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    await expect(
+      service.attachCheckoutSession({
+        paymentId: 'payment-1',
+        stripeCheckoutSessionId: 'cs_first',
+      }),
+    ).resolves.toEqual(payment);
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'payment-1',
+        OR: [
+          { stripeCheckoutSessionId: null },
+          { stripeCheckoutSessionId: 'cs_first' },
+        ],
+      },
+      data: { stripeCheckoutSessionId: 'cs_first' },
+    });
+  });
+
+  it('rejects a conflicting Checkout session without overwriting the stored id', async () => {
+    const payment = {
+      id: 'payment-1',
+      stripeCheckoutSessionId: 'cs_first',
+    };
+    prisma.payment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    await expect(
+      service.attachCheckoutSession({
+        paymentId: 'payment-1',
+        stripeCheckoutSessionId: 'cs_second',
+      }),
+    ).rejects.toMatchObject({
+      message: 'Payment already has a Checkout session',
+    });
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
   it('does not create a registration for a paid webhook after class cancellation', async () => {
     const payment = {
       id: 'payment-1',
@@ -386,6 +475,105 @@ describe('RegistrationService', () => {
       message: 'Stripe refund amount does not match payment',
     });
     expect(prisma.payment.update).not.toHaveBeenCalled();
+  });
+
+  it('persists the actual amount when completing an externally initiated refund', async () => {
+    const payment = {
+      id: 'payment-1',
+      refundStatus: 'None',
+      refundAmountCents: null,
+      stripeRefundId: null,
+    };
+    const completed = {
+      ...payment,
+      status: 'Refunded',
+      refundStatus: 'Succeeded',
+      refundAmountCents: 900,
+      stripeRefundId: 're_1',
+    };
+    prisma.payment.findUnique
+      .mockResolvedValueOnce(payment)
+      .mockResolvedValueOnce(completed);
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.completePaymentRefund({
+        paymentId: 'payment-1',
+        stripeRefundId: 're_1',
+        amountCents: 900,
+      }),
+    ).resolves.toEqual(completed);
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ refundAmountCents: 900 }) as never,
+      }) as never,
+    );
+  });
+
+  it('preserves a failed refund amount and percentage on retry', async () => {
+    const payment = {
+      id: 'payment-1',
+      status: 'Paid',
+      amountCents: 2500,
+      refundStatus: 'Failed',
+      refundPercentage: 50,
+      refundAmountCents: 1250,
+    };
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    await expect(
+      service.beginPaymentRefund({ paymentId: 'payment-1', percentage: 100 }),
+    ).resolves.toEqual(payment);
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not transition a succeeded refund to failed', async () => {
+    const payment = { id: 'payment-1', refundStatus: 'Succeeded' };
+    prisma.payment.updateMany.mockResolvedValue({ count: 0 });
+    prisma.payment.findUnique.mockResolvedValue(payment);
+
+    await expect(
+      service.failPaymentRefund('payment-1', 'late provider failure'),
+    ).resolves.toEqual(payment);
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          refundStatus: { not: 'Succeeded' },
+        }) as never,
+      }) as never,
+    );
+  });
+
+  it('does not claim a fresh pending webhook event', async () => {
+    const event = {
+      stripeEventId: 'evt_1',
+      status: 'Pending',
+      processingStartedAt: new Date(),
+    };
+    prisma.stripeWebhookEvent.create.mockRejectedValue({ code: 'P2002' });
+    prisma.stripeWebhookEvent.updateMany.mockResolvedValue({ count: 0 });
+    prisma.stripeWebhookEvent.findUnique.mockResolvedValue(event);
+
+    await expect(
+      service.recordStripeWebhookEvent({
+        stripeEventId: 'evt_1',
+        eventType: 'refund.updated',
+      }),
+    ).resolves.toEqual({ claimed: false, event });
+  });
+
+  it('atomically reclaims a failed webhook event', async () => {
+    const event = { stripeEventId: 'evt_1', status: 'Pending' };
+    prisma.stripeWebhookEvent.create.mockRejectedValue({ code: 'P2002' });
+    prisma.stripeWebhookEvent.updateMany.mockResolvedValue({ count: 1 });
+    prisma.stripeWebhookEvent.findUnique.mockResolvedValue(event);
+
+    await expect(
+      service.recordStripeWebhookEvent({
+        stripeEventId: 'evt_1',
+        eventType: 'refund.updated',
+      }),
+    ).resolves.toEqual({ claimed: true, event });
   });
 
   it('throws 404 when not registered for class/user', async () => {

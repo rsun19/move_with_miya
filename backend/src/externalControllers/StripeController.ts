@@ -93,12 +93,12 @@ export class StripeController {
   refund(
     @Req() req: Request,
     @Param('id') id: string,
-    @Body() body: { percentage?: number },
+    @Body() body: { percentage?: number } | undefined,
   ) {
     this.assertBrowserOrigin(req);
     if (body && Object.keys(body).some((key) => key !== 'percentage')) {
       throw new BadRequestException('Invalid refund request');
     }
-    return this.stripeService.refundPayment(id, body.percentage);
+    return this.stripeService.refundPayment(id, body?.percentage);
   }
 }

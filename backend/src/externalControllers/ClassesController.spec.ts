@@ -1,4 +1,4 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ClassesController } from './ClassesController';
 
 describe('ClassesController', () => {
@@ -140,5 +140,30 @@ describe('ClassesController', () => {
         source: 'class-cancellation',
       },
     );
+  });
+
+  it('attempts refunds and preserves the registration cancellation error', async () => {
+    const cls = { id: 2, status: 'Scheduled' };
+    const stripeService = {
+      refundClassPayments: jest.fn().mockResolvedValue([]),
+    };
+    controller = new ClassesController(
+      classesClient as never,
+      registrationClient as never,
+      stripeService as never,
+    );
+    classesClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      of(cmd === 'get_class' ? cls : { ...cls, status: 'Canceled' }),
+    );
+    registrationClient.send.mockImplementation(({ cmd }: { cmd: string }) =>
+      cmd === 'cancel_class_registrations'
+        ? throwError(() => new Error('registration cancellation failed'))
+        : of([]),
+    );
+
+    await expect(controller.cancelClass(2, {})).rejects.toThrow(
+      'registration cancellation failed',
+    );
+    expect(stripeService.refundClassPayments).toHaveBeenCalledWith(2);
   });
 });
