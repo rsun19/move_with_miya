@@ -172,43 +172,22 @@ describe('StripeService lifecycle', () => {
       expect(() => setup().service.onModuleDestroy()).not.toThrow();
     });
 
-    const production = {
-      NODE_ENV: 'production',
-      STRIPE_SECRET_KEY: 'sk_live_key',
-      STRIPE_WEBHOOK_SECRET: 'whsec_1',
-      PUBLIC_APP_URL: 'https://app.test',
-      STRIPE_CURRENCY: 'usd',
-    };
-
-    it('accepts complete production configuration', () => {
-      const { service } = setup(production);
+    it('accepts the default currency', () => {
+      const { service } = setup({ STRIPE_CURRENCY: undefined });
       expect(() => service.onModuleInit()).not.toThrow();
       service.onModuleDestroy();
     });
 
-    it.each([
-      [{ STRIPE_SECRET_KEY: undefined }, 'STRIPE_SECRET_KEY is required'],
-      [
-        { STRIPE_WEBHOOK_SECRET: undefined },
-        'STRIPE_WEBHOOK_SECRET is required',
-      ],
-      [
-        { PUBLIC_APP_URL: undefined },
-        'PUBLIC_APP_URL must be a valid HTTPS URL',
-      ],
-      [
-        { PUBLIC_APP_URL: 'not a url' },
-        'PUBLIC_APP_URL must be a valid HTTPS URL',
-      ],
-      [
-        { PUBLIC_APP_URL: 'http://app.test' },
-        'PUBLIC_APP_URL must be a valid HTTPS URL',
-      ],
-      [{ STRIPE_CURRENCY: 'USD' }, 'STRIPE_CURRENCY must be a three-letter'],
-    ])('rejects production configuration %o', (overrides, message) => {
-      const { service } = setup({ ...production, ...overrides });
-      expect(() => service.onModuleInit()).toThrow(message);
-    });
+    // Presence, placeholder, and HTTPS checks live in assertProductionConfig.
+    it.each(['USD', 'us', 'usdx', ''])(
+      'rejects currency %p in every environment',
+      (currency) => {
+        const { service } = setup({ STRIPE_CURRENCY: currency });
+        expect(() => service.onModuleInit()).toThrow(
+          'STRIPE_CURRENCY must be a three-letter lowercase code',
+        );
+      },
+    );
   });
 
   describe('payment service errors', () => {
@@ -353,8 +332,8 @@ describe('StripeService lifecycle', () => {
       ).rejects.toThrow('Class price is invalid');
     });
 
-    it('charges numeric prices and normalizes the currency', async () => {
-      const ctx = setup({ STRIPE_CURRENCY: 'EUR' });
+    it('charges numeric prices in the configured currency', async () => {
+      const ctx = setup({ STRIPE_CURRENCY: 'eur' });
       ctx.classes.send.mockReturnValue(of({ ...openClass, cost: 20 }));
       withPendingPayment(ctx);
 

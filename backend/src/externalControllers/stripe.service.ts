@@ -71,29 +71,11 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    if (this.config.get<string>('NODE_ENV') === 'production') {
-      const secret = this.config.get<string>('STRIPE_SECRET_KEY');
-      const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
-      const publicAppUrl = this.config.get<string>('PUBLIC_APP_URL');
-      const currency = this.config.get<string>('STRIPE_CURRENCY', 'usd');
-      let parsedUrl: URL | undefined;
-      try {
-        parsedUrl = publicAppUrl ? new URL(publicAppUrl) : undefined;
-      } catch {
-        parsedUrl = undefined;
-      }
-      if (!secret)
-        throw new Error('STRIPE_SECRET_KEY is required in production');
-      if (!webhookSecret)
-        throw new Error('STRIPE_WEBHOOK_SECRET is required in production');
-      if (!parsedUrl || parsedUrl.protocol !== 'https:')
-        throw new Error(
-          'PUBLIC_APP_URL must be a valid HTTPS URL in production',
-        );
-      if (!/^[a-z]{3}$/.test(currency))
-        throw new Error(
-          'STRIPE_CURRENCY must be a three-letter lowercase code',
-        );
+    // Presence, placeholder, and HTTPS checks for the Stripe settings run in
+    // assertProductionConfig at bootstrap.
+    const currency = this.config.get<string>('STRIPE_CURRENCY', 'usd');
+    if (!/^[a-z]{3}$/.test(currency)) {
+      throw new Error('STRIPE_CURRENCY must be a three-letter lowercase code');
     }
     this.retryTimer = setInterval(
       () => void this.retryRefunds(),
@@ -192,9 +174,7 @@ export class StripeService implements OnModuleInit, OnModuleDestroy {
         'Free classes use the free registration flow',
       );
     }
-    const currency = this.config
-      .get<string>('STRIPE_CURRENCY', 'usd')
-      .toLowerCase();
+    const currency = this.config.get<string>('STRIPE_CURRENCY', 'usd');
     const expiresAt = new Date(Date.now() + CHECKOUT_SESSION_TTL_MS);
     let payment = await this.rpc<PaymentRecord>(
       'create_or_get_pending_payment',
