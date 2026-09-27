@@ -12,10 +12,12 @@ import {
   Query,
   NotFoundException,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { lastValueFrom } from 'rxjs';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { StripeService } from './stripe.service';
 
 interface Teacher {
   id: string;
@@ -49,6 +51,7 @@ export class ClassesController {
     @Inject('CLASSES_SERVICE') private readonly classesClient: ClientProxy,
     @Inject('REGISTRATION_SERVICE')
     private readonly registrationClient: ClientProxy,
+    @Optional() private readonly stripeService?: StripeService,
   ) {}
 
   private async rpcClasses<T = unknown>(cmd: string, payload: object) {
@@ -159,6 +162,9 @@ export class ClassesController {
       }
       throw error;
     }
+    // Refund queueing is idempotent, so an admin can retry the cancellation
+    // if this step fails.
+    if (this.stripeService) await this.stripeService.refundClassPayments(id);
     return updated;
   }
 

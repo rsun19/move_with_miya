@@ -7,6 +7,7 @@ import session from 'express-session';
 import { AppModule } from './app.module';
 import { RedisService } from './redis.service';
 import type { RedisClient } from './redis.service';
+import express from 'express';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { RedisStore } = require('connect-redis') as {
@@ -16,7 +17,10 @@ const { RedisStore } = require('connect-redis') as {
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Stripe webhook signatures are computed over the raw request body.
+    bodyParser: false,
+  });
   const configService = app.get(ConfigService);
 
   app.connectMicroservice<MicroserviceOptions>({
@@ -37,6 +41,12 @@ async function bootstrap() {
 
   const redisService = app.get(RedisService);
   await redisService.connect();
+
+  app.use(
+    '/checkout/webhook',
+    express.raw({ type: 'application/json', limit: '256kb' }),
+  );
+  app.use(express.json({ limit: '256kb' }));
 
   app.use(
     session({
