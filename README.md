@@ -180,6 +180,7 @@ The production stack requires:
 - `PUBLIC_HOST`, `TLS_CERT_FILE`, and `TLS_KEY_FILE`
 - `GRAFANA_ADMIN_PASSWORD`
 - `ALERT_EMAIL_TO` (alerts are sent through Resend using `RESEND_API_KEY` and `RESEND_FROM_EMAIL`)
+- `AGE_RECIPIENT` and `BACKUP_REMOTE` for encrypted off-host backups
 
 Production checklist:
 
@@ -192,3 +193,4 @@ Production checklist:
 - [ ] Verify `POSTGRES_PASSWORD` and `RABBITMQ_PASS` are unique, strong credentials before exposing the stack publicly.
 - [ ] Confirm the admin Observability tab is available and non-admin requests receive `403`.
 - [ ] Send a test alert (see the runbook) and confirm it arrives at `ALERT_EMAIL_TO`.
+- [ ] Enable the nightly backup timer and complete the restore drill documented in [docs/production-runbook.md](docs/production-runbook.md).
