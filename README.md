@@ -179,6 +179,7 @@ The production stack requires:
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_CURRENCY`
 - `PUBLIC_HOST`, `TLS_CERT_FILE`, and `TLS_KEY_FILE`
 - `GRAFANA_ADMIN_PASSWORD`
+- `ALERT_EMAIL_TO` (alerts are sent through Resend using `RESEND_API_KEY` and `RESEND_FROM_EMAIL`)
 
 Production checklist:
 
@@ -190,3 +191,4 @@ Production checklist:
 - [ ] Set checkout rate limits appropriate to the deployment and confirm Redis is reachable before accepting payments.
 - [ ] Verify `POSTGRES_PASSWORD` and `RABBITMQ_PASS` are unique, strong credentials before exposing the stack publicly.
 - [ ] Confirm the admin Observability tab is available and non-admin requests receive `403`.
+- [ ] Send a test alert (see the runbook) and confirm it arrives at `ALERT_EMAIL_TO`.

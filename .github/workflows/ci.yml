@@ -202,12 +202,24 @@ jobs:
       TLS_CERT_FILE: /tmp/fullchain.pem
       TLS_KEY_FILE: /tmp/privkey.pem
       GRAFANA_ADMIN_PASSWORD: ci-grafana-password-0123456789
+      ALERT_EMAIL_TO: alerts@example.test
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Validate production Compose interpolation
         run: docker compose -f docker-compose.prod.yml config --quiet
+      - name: Validate Prometheus rules and Alertmanager config
+        run: |
+          docker run --rm --entrypoint sh \
+            -v "$PWD/ops/observability:/cfg:ro" -w /cfg prom/prometheus:v3.5.0 \
+            -c 'promtool check rules alerts.yml && promtool test rules alerts.test.yml'
+          sed -e 's/__ALERT_EMAIL_TO__/alerts@example.test/' \
+            -e 's/__ALERT_EMAIL_FROM__/ci@example.test/' \
+            ops/observability/alertmanager.yml.tmpl > /tmp/alertmanager.yml
+          docker run --rm --entrypoint amtool \
+            -v /tmp/alertmanager.yml:/tmp/alertmanager.yml:ro \
+            prom/alertmanager:v0.28.1 check-config /tmp/alertmanager.yml
       - name: Validate nginx configuration
         run: |
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
