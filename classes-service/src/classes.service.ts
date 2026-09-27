@@ -54,11 +54,8 @@ export class ClassesService {
     if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
       throw new BadRequestException(`${field} must be a non-negative number`);
     }
-    const number = Number(raw);
-    if (!Number.isFinite(number) || number < 0) {
-      throw new BadRequestException(`${field} must be a non-negative number`);
-    }
-    return number;
+    // The pattern above only admits finite, non-negative values.
+    return Number(raw);
   }
 
   private parsePositiveInteger(value: unknown, field: string): number {
