@@ -19,6 +19,28 @@ function assertPaymentInput(amountCents: number, currency: string) {
   }
 }
 
+function assertRefundPercentage(percentage: number) {
+  if (!Number.isInteger(percentage) || percentage < 0 || percentage > 100) {
+    throw new RpcError(
+      400,
+      'Refund percentage must be an integer from 0 to 100',
+    );
+  }
+}
+
+/** Payment fields that request a refund of `percentage` of the amount paid. */
+function refundRequest(amountCents: number, percentage: number) {
+  const refundAmountCents = Math.floor((amountCents * percentage) / 100);
+  return {
+    refundPercentage: percentage,
+    refundAmountCents,
+    refundRequestedAt: new Date(),
+    refundStatus:
+      refundAmountCents > 0 ? ('Pending' as const) : ('NotEligible' as const),
+    refundError: null,
+  };
+}
+
 @Injectable()
 export class RegistrationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -292,6 +314,21 @@ export class RegistrationService {
         throw new RpcError(400, 'Stripe payment details do not match');
       }
 
+      // Marks the payment as paid and queues a full refund because no seat
+      // can be granted for it.
+      const markPaidForFullRefund = (registrationId?: number) =>
+        tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'Paid',
+            stripePaymentIntentId:
+              data.paymentIntentId ?? payment.stripePaymentIntentId,
+            paidAt: payment.paidAt ?? new Date(),
+            registrationId,
+            ...refundRequest(payment.amountCents, 100),
+          },
+        });
+
       const classUnavailable =
         data.classStatus === 'Canceled' ||
         data.classStatus === 'Completed' ||
@@ -303,21 +340,19 @@ export class RegistrationService {
         ) {
           return { payment, registration: null, needsRefund: false };
         }
-        const refundPayment = await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: 'Paid',
-            stripePaymentIntentId:
-              data.paymentIntentId ?? payment.stripePaymentIntentId,
-            paidAt: payment.paidAt ?? new Date(),
-            refundStatus: 'Pending',
-            refundPercentage: 100,
-            refundAmountCents: payment.amountCents,
-            refundRequestedAt: new Date(),
-          },
-        });
+        // A replayed webhook must not overwrite a refund that was already
+        // requested (possibly for a partial amount).
+        if (payment.status === 'Paid' && payment.refundStatus !== 'None') {
+          return {
+            payment,
+            registration: null,
+            needsRefund:
+              payment.refundStatus === 'Pending' ||
+              payment.refundStatus === 'Failed',
+          };
+        }
         return {
-          payment: refundPayment,
+          payment: await markPaidForFullRefund(),
           registration: null,
           needsRefund: true,
         };
@@ -332,19 +367,7 @@ export class RegistrationService {
       if (payment.status !== 'Pending') {
         const updatedPayment =
           payment.status === 'Expired' || payment.status === 'Failed'
-            ? await tx.payment.update({
-                where: { id: payment.id },
-                data: {
-                  status: 'Paid',
-                  stripePaymentIntentId:
-                    data.paymentIntentId ?? payment.stripePaymentIntentId,
-                  paidAt: new Date(),
-                  refundStatus: 'Pending',
-                  refundPercentage: 100,
-                  refundAmountCents: payment.amountCents,
-                  refundRequestedAt: new Date(),
-                },
-              })
+            ? await markPaidForFullRefund()
             : data.paymentIntentId && !payment.stripePaymentIntentId
               ? await tx.payment.update({
                   where: { id: payment.id },
@@ -361,45 +384,20 @@ export class RegistrationService {
       const existing = await tx.registration.findFirst({
         where: { classId: payment.classId, userId: payment.userId },
       });
+      if (existing?.status === 'Registered') {
+        return {
+          payment: await markPaidForFullRefund(existing.id),
+          registration: existing,
+          needsRefund: true,
+        };
+      }
       const registeredCount = await tx.registration.count({
         where: { classId: payment.classId, status: 'Registered' },
       });
-      if (
-        registeredCount >= data.capacity &&
-        existing?.status !== 'Registered'
-      ) {
-        const paidPayment = await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: 'Paid',
-            stripePaymentIntentId: data.paymentIntentId ?? undefined,
-            paidAt: new Date(),
-            refundStatus: 'Pending',
-            refundPercentage: 100,
-            refundAmountCents: payment.amountCents,
-            refundRequestedAt: new Date(),
-          },
-        });
-        return { payment: paidPayment, registration: null, needsRefund: true };
-      }
-
-      if (existing?.status === 'Registered') {
-        const duplicatePayment = await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: 'Paid',
-            stripePaymentIntentId: data.paymentIntentId ?? undefined,
-            paidAt: new Date(),
-            registrationId: existing.id,
-            refundStatus: 'Pending',
-            refundPercentage: 100,
-            refundAmountCents: payment.amountCents,
-            refundRequestedAt: new Date(),
-          },
-        });
+      if (registeredCount >= data.capacity) {
         return {
-          payment: duplicatePayment,
-          registration: existing,
+          payment: await markPaidForFullRefund(),
+          registration: null,
           needsRefund: true,
         };
       }
@@ -464,16 +462,7 @@ export class RegistrationService {
   }
 
   async beginPaymentRefund(data: { paymentId: string; percentage: number }) {
-    if (
-      !Number.isInteger(data.percentage) ||
-      data.percentage < 0 ||
-      data.percentage > 100
-    ) {
-      throw new RpcError(
-        400,
-        'Refund percentage must be an integer from 0 to 100',
-      );
-    }
+    assertRefundPercentage(data.percentage);
     const payment = await this.prisma.client.payment.findUnique({
       where: { id: data.paymentId },
     });
@@ -488,18 +477,9 @@ export class RegistrationService {
     ) {
       throw new RpcError(409, 'A different refund is already in progress');
     }
-    const refundAmountCents = Math.floor(
-      (payment.amountCents * data.percentage) / 100,
-    );
     return this.prisma.client.payment.update({
       where: { id: payment.id },
-      data: {
-        refundPercentage: data.percentage,
-        refundAmountCents,
-        refundRequestedAt: new Date(),
-        refundStatus: refundAmountCents > 0 ? 'Pending' : 'NotEligible',
-        refundError: null,
-      },
+      data: refundRequest(payment.amountCents, data.percentage),
     });
   }
 
@@ -585,7 +565,7 @@ export class RegistrationService {
   }) {
     try {
       const event = await this.prisma.client.stripeWebhookEvent.create({
-        data: data,
+        data: { stripeEventId: data.stripeEventId, eventType: data.eventType },
       });
       return { claimed: true, event };
     } catch (error) {
@@ -593,7 +573,7 @@ export class RegistrationService {
       const event = await this.prisma.client.stripeWebhookEvent.findUnique({
         where: { stripeEventId: data.stripeEventId },
       });
-      return { claimed: event?.status === 'Processed' ? false : true, event };
+      return { claimed: event?.status !== 'Processed', event };
     }
   }
 
@@ -824,16 +804,7 @@ export class RegistrationService {
         options.refundPercentage !== undefined &&
         current.status === 'Registered'
       ) {
-        if (
-          !Number.isInteger(options.refundPercentage) ||
-          options.refundPercentage < 0 ||
-          options.refundPercentage > 100
-        ) {
-          throw new RpcError(
-            400,
-            'Refund percentage must be an integer from 0 to 100',
-          );
-        }
+        assertRefundPercentage(options.refundPercentage);
         const payment = await tx.payment.findFirst({
           where: {
             classId: current.classId,
@@ -844,18 +815,9 @@ export class RegistrationService {
           orderBy: { createdAt: 'desc' },
         });
         if (payment) {
-          const refundAmountCents = Math.floor(
-            (payment.amountCents * options.refundPercentage) / 100,
-          );
           await tx.payment.update({
             where: { id: payment.id },
-            data: {
-              refundPercentage: options.refundPercentage,
-              refundAmountCents,
-              refundRequestedAt: new Date(),
-              refundStatus: refundAmountCents > 0 ? 'Pending' : 'NotEligible',
-              refundError: null,
-            },
+            data: refundRequest(payment.amountCents, options.refundPercentage),
           });
           return { ...result, refundPaymentId: payment.id };
         }
