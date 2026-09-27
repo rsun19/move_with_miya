@@ -40,6 +40,7 @@ import type {
   Registration,
   YogaClass,
 } from '@/lib/types';
+import ObservabilityPanel from './ObservabilityPanel';
 
 interface AdminDashboardProps {
   initialClasses: YogaClass[];
@@ -56,7 +57,8 @@ type TabValue =
   | 'registrations'
   | 'payments'
   | 'contact'
-  | 'users';
+  | 'users'
+  | 'observability';
 
 const emptyClassForm = {
   name: '',
@@ -502,6 +504,7 @@ export default function AdminDashboard({
         <Tab label="Payments" value="payments" />
         <Tab label="Contact" value="contact" />
         <Tab label="Users" value="users" />
+        <Tab label="Observability" value="observability" />
       </Tabs>
 
       {tab === 'classes' && (
@@ -947,6 +950,8 @@ export default function AdminDashboard({
           </Table>
         </TableContainer>
       )}
+
+      {tab === 'observability' && <ObservabilityPanel />}
 
       <Dialog
         open={classDialog}
