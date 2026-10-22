@@ -42,8 +42,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await api('/api/auth/logout', { method: 'POST' });
-    setUser(null);
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    }
+    // Reload onto a public page either way: it drops the signed-in page that
+    // is still on screen and the client router cache (which back navigation
+    // would replay admin or dashboard data from), and shows whether the
+    // session really ended.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full reload is the point
+    window.location.assign('/classes');
   }, []);
 
   return (
